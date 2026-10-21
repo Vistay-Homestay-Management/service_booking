@@ -1,0 +1,9 @@
+type Query {
+  bookingServiceInfo: BookingServiceInfo!
+}
+
+type BookingServiceInfo {
+  name: String!
+  version: String!
+}
+
