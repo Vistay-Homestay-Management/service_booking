@@ -1,9 +1,21 @@
 type Query {
   bookingServiceInfo: BookingServiceInfo!
+  booking(id: ID!): Booking!
+  bookings(status: String, limit: Int = 50): [Booking!]!
+}
+
+type Booking {
+  id: ID!
+  bookingCode: String!
+  propertyId: ID!
+  status: String!
+  checkInDate: String!
+  checkOutDate: String!
+  totalAmount: String!
+  currency: String!
 }
 
 type BookingServiceInfo {
   name: String!
   version: String!
 }
-
