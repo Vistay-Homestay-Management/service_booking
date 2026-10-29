@@ -4,6 +4,9 @@ import com.vistay.booking.application.AuthorizationClient;
 import com.vistay.booking.application.PricingPolicyException;
 import com.vistay.booking.application.PricingPolicyService;
 import com.vistay.booking.application.PricingPolicyService.ProfileVersion;
+import com.vistay.booking.application.PricingQuoteCalculator;
+import com.vistay.booking.application.PricingQuoteCalculator.Command;
+import com.vistay.booking.application.PricingQuoteCalculator.Quote;
 import com.vistay.booking.application.PricingPolicyValidator.Draft;
 import com.vistay.booking.application.PricingPolicyValidator.Rule;
 import com.vistay.booking.application.PricingScopePolicy;
@@ -22,15 +25,18 @@ import org.springframework.stereotype.Controller;
 @Controller
 public class PricingController {
     private final PricingPolicyService pricing;
+    private final PricingQuoteCalculator quotes;
     private final AuthorizationClient authorizations;
     private final PricingScopePolicy scopes;
 
     public PricingController(
         PricingPolicyService pricing,
+        PricingQuoteCalculator quotes,
         AuthorizationClient authorizations,
         PricingScopePolicy scopes
     ) {
         this.pricing = pricing;
+        this.quotes = quotes;
         this.authorizations = authorizations;
         this.scopes = scopes;
     }
@@ -68,6 +74,19 @@ public class PricingController {
         var snapshot = authorizations.require(accountId, "pricing:read");
         scopes.require(snapshot, "pricing:read", propertyId);
         return pricing.versions(propertyId);
+    }
+
+    @QueryMapping
+    public Quote calculatePropertyPriceQuote(
+        @AuthenticationPrincipal Jwt jwt,
+        @Argument CalculatePropertyPriceQuoteInput input
+    ) {
+        var accountId = accountId(jwt);
+        var snapshot = authorizations.require(accountId, "pricing:read");
+        var command = input.toCommand();
+        scopes.require(snapshot, "pricing:read", command.propertyId());
+        var profile = pricing.requireVersion(command.rateProfileVersionId());
+        return quotes.calculate(profile, command);
     }
 
     private static UUID accountId(Jwt jwt) {
@@ -161,6 +180,35 @@ public class PricingController {
             } catch (DateTimeParseException | NumberFormatException invalid) {
                 throw new PricingPolicyException("INVALID_PRICING_RULE",
                     "Rule dates and values must use their documented formats");
+            }
+        }
+    }
+
+    public record CalculatePropertyPriceQuoteInput(
+        UUID rateProfileVersionId,
+        UUID propertyId,
+        String checkInDate,
+        String checkOutDate,
+        Integer guestCount,
+        PricingChannel channel,
+        Boolean staffCreated,
+        Integer commissionBps
+    ) {
+        Command toCommand() {
+            try {
+                return new Command(
+                    rateProfileVersionId,
+                    propertyId,
+                    LocalDate.parse(checkInDate),
+                    LocalDate.parse(checkOutDate),
+                    valueOrDefault(guestCount, 1),
+                    channel == null ? null : channel.name(),
+                    staffCreated != null && staffCreated,
+                    commissionBps
+                );
+            } catch (DateTimeParseException | NullPointerException invalid) {
+                throw new PricingPolicyException("INVALID_QUOTE_INPUT",
+                    "Quote dates must use ISO-8601 format and all required fields must be present");
             }
         }
     }

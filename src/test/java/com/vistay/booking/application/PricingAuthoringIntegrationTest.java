@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -186,6 +187,38 @@ class PricingAuthoringIntegrationTest {
         assertThat(other.version()).isEqualTo(1);
         assertThat(service.versions(firstProperty)).extracting(PricingPolicyService.ProfileVersion::version)
             .containsExactly(2, 1);
+    }
+
+    @Test
+    void calculatesPersistedProfileWithoutWritingQuoteState() {
+        var actorId = UUID.randomUUID();
+        var propertyId = UUID.randomUUID();
+        var profile = create(actorId,
+            validDraft("pricing-calculate-1", propertyId, 1_000_000));
+        var tableCounts = Map.of(
+            "profiles", count("property_rate_profile_versions"),
+            "rules", count("pricing_rule_versions"),
+            "commands", count("command_idempotency"),
+            "audits", count("audit_events")
+        );
+
+        var loaded = service.requireVersion(profile.id());
+        var quote = new PricingQuoteCalculator().calculate(loaded,
+            new PricingQuoteCalculator.Command(
+                profile.id(), propertyId, LocalDate.of(2026, 11, 2),
+                LocalDate.of(2026, 11, 4), 2, "ADMIN_PORTAL", false, null
+            ));
+
+        assertThat(quote.stayProduct()).isEqualTo(PricingQuoteCalculator.StayProduct.SHORT);
+        assertThat(quote.lodgingBeforeAdjustments()).isEqualTo("2000000");
+        assertThat(quote.discountAmount()).isEqualTo("100000");
+        assertThat(quote.totalAmount()).isEqualTo("1900000");
+        assertThat(quote.evaluatedRules()).hasSize(2).allSatisfy(evaluation ->
+            assertThat(evaluation.reason()).isEqualTo("ACTION_APPLIED"));
+        assertThat(count("property_rate_profile_versions")).isEqualTo(tableCounts.get("profiles"));
+        assertThat(count("pricing_rule_versions")).isEqualTo(tableCounts.get("rules"));
+        assertThat(count("command_idempotency")).isEqualTo(tableCounts.get("commands"));
+        assertThat(count("audit_events")).isEqualTo(tableCounts.get("audits"));
     }
 
     @Test
