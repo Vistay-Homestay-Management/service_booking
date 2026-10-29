@@ -11,7 +11,7 @@ type Booking {
   status: String!
   checkInDate: String!
   checkOutDate: String!
-  totalAmount: String!
+  totalAmount: String
   currency: String!
 }
 

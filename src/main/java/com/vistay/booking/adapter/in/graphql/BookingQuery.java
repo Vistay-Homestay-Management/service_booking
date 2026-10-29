@@ -2,6 +2,7 @@ package com.vistay.booking.adapter.in.graphql;
 
 import com.vistay.booking.application.AuthorizationClient;
 import com.vistay.booking.application.AuthorizationClient.Scope;
+import com.vistay.booking.application.BookingRecordScopePolicy;
 import graphql.GraphqlErrorException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -20,24 +21,51 @@ import org.springframework.stereotype.Controller;
 public class BookingQuery {
     private final JdbcClient jdbc;
     private final AuthorizationClient authorizations;
+    private final BookingRecordScopePolicy scopePolicy;
 
-    public BookingQuery(JdbcClient jdbc, AuthorizationClient authorizations) {
+    public BookingQuery(
+        JdbcClient jdbc,
+        AuthorizationClient authorizations,
+        BookingRecordScopePolicy scopePolicy
+    ) {
         this.jdbc = jdbc;
         this.authorizations = authorizations;
+        this.scopePolicy = scopePolicy;
     }
 
     @QueryMapping
     public BookingView booking(@AuthenticationPrincipal Jwt jwt, @Argument UUID id) {
         var accountId = accountId(jwt);
         var snapshot = authorizations.require(accountId, "booking:read");
+        var commercialScopes = snapshot.scopes("booking:read_sensitive");
         var row = jdbc.sql("""
                 SELECT id, booking_code, property_id, status, check_in_date, check_out_date,
-                       total_amount, currency, created_by_account_type, created_by_account_id,
-                       assigned_admin_user_id
+                       CASE WHEN :commercialAll OR (:commercialAssigned AND (
+                           assigned_admin_user_id = :profileId
+                           OR EXISTS (
+                               SELECT 1 FROM booking_attributions ba
+                               WHERE ba.booking_id = bookings.id AND ba.admin_user_id = :profileId
+                                 AND ba.valid_from <= now()
+                                 AND (ba.valid_until IS NULL OR ba.valid_until > now())
+                           )
+                       )) THEN total_amount ELSE NULL END AS total_amount,
+                       currency, assigned_admin_user_id,
+                       EXISTS (
+                           SELECT 1 FROM booking_attributions ba
+                           WHERE ba.booking_id = bookings.id AND ba.admin_user_id = :profileId
+                             AND ba.valid_from <= now()
+                             AND (ba.valid_until IS NULL OR ba.valid_until > now())
+                       ) AS attributed_to_actor
                 FROM bookings WHERE id = :id
-                """).param("id", id).query(BookingRow.class).optional()
+                """)
+            .param("id", id)
+            .param("profileId", snapshot.profileId())
+            .param("commercialAll", commercialScopes.contains(Scope.ALL))
+            .param("commercialAssigned", commercialScopes.contains(Scope.ASSIGNED))
+            .query(BookingRow.class).optional()
             .orElseThrow(() -> error("NOT_FOUND", "Booking was not found"));
-        if (!allowed(row, accountId, snapshot)) {
+        if (!scopePolicy.allows(snapshot.scopes("booking:read"), snapshot.profileId(),
+            row.assignedAdminUserId(), row.attributedToActor())) {
             auditDenied(accountId, row.id());
             throw error("FORBIDDEN_SCOPE", "Booking is outside the authorized data scope");
         }
@@ -53,17 +81,27 @@ public class BookingQuery {
         var accountId = accountId(jwt);
         var snapshot = authorizations.require(accountId, "booking:read");
         var scopes = snapshot.scopes("booking:read");
+        var commercialScopes = snapshot.scopes("booking:read_sensitive");
         var pageSize = limit == null ? 50 : Math.max(1, Math.min(limit, 100));
         var normalizedStatus = status == null ? "" : status.trim();
         return jdbc.sql("""
                 SELECT b.id, b.booking_code, b.property_id, b.status, b.check_in_date, b.check_out_date,
-                       b.total_amount, b.currency, b.created_by_account_type, b.created_by_account_id,
-                       b.assigned_admin_user_id
+                       CASE WHEN :commercialAll OR (:commercialAssigned AND (
+                           b.assigned_admin_user_id = :profileId
+                           OR EXISTS (
+                               SELECT 1 FROM booking_attributions commercial_ba
+                               WHERE commercial_ba.booking_id = b.id
+                                 AND commercial_ba.admin_user_id = :profileId
+                                 AND commercial_ba.valid_from <= now()
+                                 AND (commercial_ba.valid_until IS NULL OR commercial_ba.valid_until > now())
+                           )
+                       )) THEN b.total_amount ELSE NULL END AS total_amount,
+                       b.currency, b.assigned_admin_user_id,
+                       false AS attributed_to_actor
                 FROM bookings b
                 WHERE (NOT :hasStatus OR b.status = :status)
                   AND (
                     :allScope
-                    OR (:ownScope AND b.created_by_account_type = 'ADMIN' AND b.created_by_account_id = :accountId)
                     OR (:assignedScope AND (
                         b.assigned_admin_user_id = :profileId
                         OR EXISTS (
@@ -80,31 +118,13 @@ public class BookingQuery {
             .param("hasStatus", !normalizedStatus.isBlank())
             .param("status", normalizedStatus)
             .param("allScope", scopes.contains(Scope.ALL))
-            .param("ownScope", scopes.contains(Scope.OWN))
             .param("assignedScope", scopes.contains(Scope.ASSIGNED))
-            .param("accountId", accountId)
+            .param("commercialAll", commercialScopes.contains(Scope.ALL))
+            .param("commercialAssigned", commercialScopes.contains(Scope.ASSIGNED))
             .param("profileId", snapshot.profileId())
             .param("limit", pageSize)
             .query(BookingRow.class)
             .list().stream().map(BookingRow::view).toList();
-    }
-
-    private boolean allowed(BookingRow booking, UUID accountId, AuthorizationClient.Snapshot snapshot) {
-        var scopes = snapshot.scopes("booking:read");
-        if (scopes.contains(Scope.ALL)) return true;
-        if (scopes.contains(Scope.OWN)
-            && "ADMIN".equals(booking.createdByAccountType())
-            && accountId.equals(booking.createdByAccountId())) return true;
-        if (!scopes.contains(Scope.ASSIGNED)) return false;
-        if (snapshot.profileId().equals(booking.assignedAdminUserId())) return true;
-        return jdbc.sql("""
-                SELECT EXISTS (
-                    SELECT 1 FROM booking_attributions
-                    WHERE booking_id = :bookingId AND admin_user_id = :profileId
-                      AND valid_from <= now() AND (valid_until IS NULL OR valid_until > now())
-                )
-                """).param("bookingId", booking.id()).param("profileId", snapshot.profileId())
-            .query(Boolean.class).single();
     }
 
     private void auditDenied(UUID actorAccountId, UUID bookingId) {
@@ -131,10 +151,10 @@ public class BookingQuery {
 
     private record BookingRow(UUID id, String bookingCode, UUID propertyId, String status,
         LocalDate checkInDate, LocalDate checkOutDate, BigDecimal totalAmount, String currency,
-        String createdByAccountType, UUID createdByAccountId, UUID assignedAdminUserId) {
+        UUID assignedAdminUserId, boolean attributedToActor) {
         BookingView view() {
             return new BookingView(id, bookingCode, propertyId, status, checkInDate.toString(),
-                checkOutDate.toString(), totalAmount.toPlainString(), currency.trim());
+                checkOutDate.toString(), totalAmount == null ? null : totalAmount.toPlainString(), currency.trim());
         }
     }
 
