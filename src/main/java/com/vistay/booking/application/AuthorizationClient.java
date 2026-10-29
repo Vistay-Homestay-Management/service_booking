@@ -57,17 +57,23 @@ public class AuthorizationClient {
     static Snapshot enforce(Snapshot snapshot, String permission, String forbiddenCode) {
         if (!snapshot.active() || snapshot.profileId() == null) {
             if (forbiddenCode != null) {
-                throw error(forbiddenCode, "Inventory read is not authorized");
+                throw error(forbiddenCode, forbiddenMessage(forbiddenCode));
             }
             throw error("PROFILE_INACTIVE", "Administrator profile is inactive");
         }
         if (!snapshot.grants().containsKey(permission) || snapshot.grants().get(permission).isEmpty()) {
             if (forbiddenCode != null) {
-                throw error(forbiddenCode, "Inventory read is not authorized");
+                throw error(forbiddenCode, forbiddenMessage(forbiddenCode));
             }
             throw error("FORBIDDEN_PERMISSION", "Missing permission " + permission);
         }
         return snapshot;
+    }
+
+    private static String forbiddenMessage(String code) {
+        return "INVENTORY_BLOCK_FORBIDDEN".equals(code)
+            ? "Inventory block command is not authorized"
+            : "Inventory read is not authorized";
     }
 
     public Snapshot get(UUID accountId) {

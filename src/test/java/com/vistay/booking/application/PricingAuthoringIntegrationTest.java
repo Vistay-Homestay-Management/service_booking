@@ -54,7 +54,7 @@ class PricingAuthoringIntegrationTest {
             .load()
             .migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.targetSchemaVersion).isEqualTo("6");
+        assertThat(result.targetSchemaVersion).isEqualTo("7");
         jdbc = JdbcClient.create(dataSource);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
     }

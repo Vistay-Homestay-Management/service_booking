@@ -17,12 +17,15 @@ import tools.jackson.databind.ObjectMapper;
 public class OutboxPublisher {
     private static final String RATE_PROFILE_PUBLISHED =
         "vistay.booking.rate-profile-published";
+    private static final String INVENTORY_BLOCK_CHANGED =
+        "vistay.booking.inventory-block-changed";
 
     private final JdbcClient jdbc;
     private final KafkaTemplate<String, String> kafka;
     private final ObjectMapper json;
     private final long timeoutSeconds;
     private final String rateProfilePublishedTopic;
+    private final String inventoryBlockChangedTopic;
 
     public OutboxPublisher(
         JdbcClient jdbc,
@@ -30,13 +33,16 @@ public class OutboxPublisher {
         ObjectMapper json,
         @Value("${vistay.outbox.send-timeout-seconds:10}") long timeoutSeconds,
         @Value("${vistay.topics.rate-profile-published:"
-            + "vistay.booking.rate-profile-published.v1}") String rateProfilePublishedTopic
+            + "vistay.booking.rate-profile-published.v1}") String rateProfilePublishedTopic,
+        @Value("${vistay.topics.inventory-block-changed:"
+            + "vistay.booking.inventory-block-changed.v1}") String inventoryBlockChangedTopic
     ) {
         this.jdbc = jdbc;
         this.kafka = kafka;
         this.json = json;
         this.timeoutSeconds = timeoutSeconds;
         this.rateProfilePublishedTopic = rateProfilePublishedTopic;
+        this.inventoryBlockChangedTopic = inventoryBlockChangedTopic;
     }
 
     @Scheduled(fixedDelayString = "${vistay.outbox.poll-delay-ms:1000}")
@@ -93,6 +99,9 @@ public class OutboxPublisher {
     private String topic(OutboxRow event) {
         if (RATE_PROFILE_PUBLISHED.equals(event.eventType()) && event.eventVersion() == 1) {
             return rateProfilePublishedTopic;
+        }
+        if (INVENTORY_BLOCK_CHANGED.equals(event.eventType()) && event.eventVersion() == 1) {
+            return inventoryBlockChangedTopic;
         }
         return event.eventType() + ".v" + event.eventVersion();
     }

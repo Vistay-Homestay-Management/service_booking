@@ -17,6 +17,8 @@ type Mutation {
   applyPropertyPriceOverride(input: ApplyPropertyPriceOverrideInput!): AppliedPropertyPriceOverride!
   publishPropertyRateProfileVersion(input: PublishPropertyRateProfileVersionInput!): PricingProfilePublication!
   createPropertyPriceQuoteSnapshot(input: CreatePropertyPriceQuoteSnapshotInput!): PropertyPriceQuoteSnapshot!
+  createInventoryBlock(input: CreateInventoryBlockInput!): InventoryBlockCommandResult!
+  releaseInventoryBlock(input: ReleaseInventoryBlockInput!): InventoryBlockCommandResult!
 }
 
 type Booking {
@@ -75,6 +77,57 @@ enum InventoryBlockStatus {
   ACTIVE
   RELEASED
   CANCELLED
+}
+
+enum OperatorInventoryBlockType {
+  MAINTENANCE
+  CLEANING
+  OWNER_USE
+  MANUAL
+}
+
+enum InventoryBlockCommandAction {
+  CREATED
+  RELEASED
+}
+
+input CreateInventoryBlockInput {
+  idempotencyKey: String!
+  propertyId: ID!
+  blockType: OperatorInventoryBlockType!
+  startDate: String!
+  endDateExclusive: String!
+  expectedInventoryRevision: String!
+  reason: String!
+  correlationId: String!
+}
+
+input ReleaseInventoryBlockInput {
+  idempotencyKey: String!
+  propertyId: ID!
+  inventoryBlockId: ID!
+  expectedInventoryRevision: String!
+  reason: String!
+  correlationId: String!
+}
+
+type InventoryBlockCommandResult {
+  commandId: ID!
+  idempotencyKey: String!
+  requestHash: String!
+  inventoryBlockId: ID!
+  action: InventoryBlockCommandAction!
+  propertyId: ID!
+  blockType: InventoryBlockType!
+  status: InventoryBlockStatus!
+  startDate: String!
+  endDateExclusive: String!
+  blockVersion: String!
+  inventoryRevision: String!
+  branchId: ID!
+  propertyMembershipVersion: String!
+  occurredAt: String!
+  releasedAt: String
 }
 
 type PropertyRateProfileVersion {

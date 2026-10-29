@@ -84,7 +84,7 @@ class PricingPublicationIntegrationTest {
             .load()
             .migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.targetSchemaVersion).isEqualTo("6");
+        assertThat(result.targetSchemaVersion).isEqualTo("7");
         jdbc = JdbcClient.create(dataSource);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         json = JsonMapper.builder().build();
@@ -157,7 +157,8 @@ class PricingPublicationIntegrationTest {
         when(kafka.send(anyString(), anyString(), anyString()))
             .thenReturn(CompletableFuture.completedFuture(null));
         new OutboxPublisher(jdbc, kafka, json, 1,
-            "vistay.booking.rate-profile-published.v1").publishPending();
+            "vistay.booking.rate-profile-published.v1",
+            "vistay.booking.inventory-block-changed.v1").publishPending();
         var envelope = ArgumentCaptor.forClass(String.class);
         verify(kafka).send(eq("vistay.booking.rate-profile-published.v1"),
             eq(propertyId.toString()), envelope.capture());

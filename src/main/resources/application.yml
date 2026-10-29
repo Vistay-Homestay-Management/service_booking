@@ -111,6 +111,7 @@ vistay:
   topics:
     authorization-changed: ${AUTHORIZATION_CHANGED_TOPIC:vistay.user.authorization-changed.v1}
     rate-profile-published: ${RATE_PROFILE_PUBLISHED_TOPIC:vistay.booking.rate-profile-published.v1}
+    inventory-block-changed: ${INVENTORY_BLOCK_CHANGED_TOPIC:vistay.booking.inventory-block-changed.v1}
   outbox:
     poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
     send-timeout-seconds: ${OUTBOX_SEND_TIMEOUT_SECONDS:10}

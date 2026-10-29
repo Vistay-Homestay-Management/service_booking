@@ -46,3 +46,24 @@ time, and sanitized type/status/range/channel-provider evidence. It never
 contains booking IDs, external channel references, reasons, guest/customer data,
 or other PII. This read creates no hold; booking commands must revalidate and
 rely on the database exclusion constraint for concurrency safety.
+
+## Inventory block command API
+
+`createInventoryBlock(input)` and `releaseInventoryBlock(input)` are the
+authenticated Backoffice write boundary for explicit operator blocks. Both
+require `inventory:block`, an idempotency key, an expected property inventory
+revision, a reason, and a correlation ID. `SUPER_ADMIN` needs explicit `ALL`;
+`MANAGER` needs the exact current `PARTITION(BRANCH, ...)`. Property authority
+is resolved for both roles and captured in the immutable command outcome.
+
+Create accepts only MAINTENANCE, CLEANING, OWNER_USE, or MANUAL and creates an
+ACTIVE half-open date range. Release accepts only an operator block currently in
+TENTATIVE or ACTIVE state. BOOKING and CHANNEL lifecycle rows cannot be changed
+through these mutations. Exact retries return the original command result and
+do not advance the inventory revision or emit another audit/outbox fact.
+
+Every successful command atomically persists the block transition, monotonic
+property revision, immutable command evidence, audit row, and
+`vistay.booking.inventory-block-changed.v1` outbox event. The database exclusion
+constraint remains the final overlap authority. SCRUM-361, rather than this
+write API, owns stale/expired/orphan repair and revision-gap reconciliation.

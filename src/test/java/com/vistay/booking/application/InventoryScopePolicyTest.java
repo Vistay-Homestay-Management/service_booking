@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class InventoryScopePolicyTest {
     private static final String PERMISSION = "inventory:read";
+    private static final String BLOCK_PERMISSION = "inventory:block";
     private static final UUID PROPERTY_ID = UUID.randomUUID();
     private static final UUID BRANCH_ID = UUID.randomUUID();
 
@@ -94,6 +95,38 @@ class InventoryScopePolicyTest {
     }
 
     @Test
+    void blockCommandsAllowOnlySuperAdminAllOrManagerCurrentBranch() {
+        var policy = mappedPolicy();
+        var superAdmin = blockSnapshot("SUPER_ADMIN", Set.of(Scope.ALL), Set.of());
+        var manager = blockSnapshot("MANAGER", Set.of(Scope.PARTITION),
+            Set.of(new Partition("BRANCH", BRANCH_ID)));
+
+        assertThat(policy.requireWrite(superAdmin, BLOCK_PERMISSION, PROPERTY_ID).type())
+            .isEqualTo("ALL");
+        assertThat(policy.requireWrite(manager, BLOCK_PERMISSION, PROPERTY_ID).type())
+            .isEqualTo("BRANCH");
+
+        for (var role : Set.of("CTV", "RECEPTIONIST", "STAFF")) {
+            var scopes = "CTV".equals(role) ? Set.of(Scope.ALL) : Set.of(Scope.PARTITION);
+            var partitions = "CTV".equals(role) ? Set.<Partition>of()
+                : Set.of(new Partition("BRANCH", BRANCH_ID));
+            assertWriteCode(policy, blockSnapshot(role, scopes, partitions),
+                "INVENTORY_BLOCK_FORBIDDEN");
+        }
+        assertWriteCode(policy,
+            blockSnapshot("MANAGER", Set.of(Scope.ALL), Set.of()),
+            "INVENTORY_BLOCK_FORBIDDEN");
+        assertWriteCode(policy,
+            blockSnapshot("SUPER_ADMIN", Set.of(Scope.PARTITION),
+                Set.of(new Partition("BRANCH", BRANCH_ID))),
+            "INVENTORY_BLOCK_FORBIDDEN");
+        assertWriteCode(policy,
+            blockSnapshot("MANAGER", Set.of(Scope.PARTITION),
+                Set.of(new Partition("BRANCH", UUID.randomUUID()))),
+            "INVENTORY_BLOCK_FORBIDDEN");
+    }
+
+    @Test
     void notFoundUnmappedOrUnavailablePropertyFailsEvenForAll() {
         assertCode(new InventoryScopePolicy(propertyId ->
                 PropertyPartitionClient.Resolution.notFound()),
@@ -128,5 +161,26 @@ class InventoryScopePolicyTest {
         return new AuthorizationClient.Snapshot(true, UUID.randomUUID(), 9,
             Map.of(PERMISSION, scopes), Map.of(PERMISSION, partitions),
             scopes.contains(Scope.ALL) ? Set.of("SUPER_ADMIN") : Set.of("MANAGER"));
+    }
+
+    private AuthorizationClient.Snapshot blockSnapshot(
+        String role,
+        Set<Scope> scopes,
+        Set<Partition> partitions
+    ) {
+        return new AuthorizationClient.Snapshot(true, UUID.randomUUID(), 9,
+            Map.of(BLOCK_PERMISSION, scopes), Map.of(BLOCK_PERMISSION, partitions),
+            Set.of(role));
+    }
+
+    private void assertWriteCode(
+        InventoryScopePolicy policy,
+        AuthorizationClient.Snapshot snapshot,
+        String expectedCode
+    ) {
+        assertThatThrownBy(() -> policy.requireWrite(
+                snapshot, BLOCK_PERMISSION, PROPERTY_ID))
+            .isInstanceOfSatisfying(PricingPolicyException.class,
+                error -> assertThat(error.code()).isEqualTo(expectedCode));
     }
 }

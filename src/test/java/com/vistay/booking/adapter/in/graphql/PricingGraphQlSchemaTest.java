@@ -197,6 +197,49 @@ class PricingGraphQlSchemaTest {
             .containsExactly("TENTATIVE", "ACTIVE", "RELEASED", "CANCELLED");
     }
 
+    @Test
+    void exposesExactIdempotentInventoryBlockCommandContract() throws Exception {
+        var schema = new ClassPathResource("graphql/schema.graphqls")
+            .getContentAsString(StandardCharsets.UTF_8);
+        var registry = new SchemaParser().parse(schema);
+
+        var mutation = registry.getType("Mutation", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(mutation.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains("createInventoryBlock", "releaseInventoryBlock");
+        assertThat(field(mutation, "createInventoryBlock").getInputValueDefinitions())
+            .extracting(input -> input.getName()).containsExactly("input");
+        assertThat(field(mutation, "releaseInventoryBlock").getInputValueDefinitions())
+            .extracting(input -> input.getName()).containsExactly("input");
+
+        var create = registry.getType(
+            "CreateInventoryBlockInput", InputObjectTypeDefinition.class).orElseThrow();
+        assertThat(create.getInputValueDefinitions()).extracting(input -> input.getName())
+            .containsExactly("idempotencyKey", "propertyId", "blockType", "startDate",
+                "endDateExclusive", "expectedInventoryRevision", "reason",
+                "correlationId");
+        var release = registry.getType(
+            "ReleaseInventoryBlockInput", InputObjectTypeDefinition.class).orElseThrow();
+        assertThat(release.getInputValueDefinitions()).extracting(input -> input.getName())
+            .containsExactly("idempotencyKey", "propertyId", "inventoryBlockId",
+                "expectedInventoryRevision", "reason", "correlationId");
+
+        var result = registry.getType(
+            "InventoryBlockCommandResult", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(result.getFieldDefinitions()).extracting(output -> output.getName())
+            .containsExactly("commandId", "idempotencyKey", "requestHash",
+                "inventoryBlockId", "action", "propertyId", "blockType", "status",
+                "startDate", "endDateExclusive", "blockVersion", "inventoryRevision",
+                "branchId", "propertyMembershipVersion", "occurredAt", "releasedAt");
+        var operatorTypes = registry.getType(
+            "OperatorInventoryBlockType", EnumTypeDefinition.class).orElseThrow();
+        assertThat(operatorTypes.getEnumValueDefinitions()).extracting(value -> value.getName())
+            .containsExactly("MAINTENANCE", "CLEANING", "OWNER_USE", "MANUAL");
+        var actions = registry.getType(
+            "InventoryBlockCommandAction", EnumTypeDefinition.class).orElseThrow();
+        assertThat(actions.getEnumValueDefinitions()).extracting(value -> value.getName())
+            .containsExactly("CREATED", "RELEASED");
+    }
+
     private graphql.language.FieldDefinition field(
         ObjectTypeDefinition type,
         String name

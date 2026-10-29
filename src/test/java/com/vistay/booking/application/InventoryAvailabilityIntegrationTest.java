@@ -56,7 +56,7 @@ class InventoryAvailabilityIntegrationTest {
             .load()
             .migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.targetSchemaVersion).isEqualTo("6");
+        assertThat(result.targetSchemaVersion).isEqualTo("7");
         jdbc = JdbcClient.create(dataSource);
         availability = new InventoryAvailabilityService(jdbc,
             Clock.fixed(OBSERVED_AT, ZoneOffset.UTC),
