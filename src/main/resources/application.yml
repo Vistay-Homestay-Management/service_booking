@@ -121,8 +121,9 @@ vistay:
   property:
     partition-deadline: ${PROPERTY_PARTITION_DEADLINE:2s}
   grpc:
-    allowed-caller-uris: ${GRPC_ALLOWED_CALLER_URIS:spiffe://vistay/service/payment,spiffe://vistay/service/finance}
+    allowed-caller-uris: ${GRPC_ALLOWED_CALLER_URIS:spiffe://vistay/service/payment,spiffe://vistay/service/finance,spiffe://vistay/service/property}
     pricing-reconciliation-allowed-caller-uris: ${PRICING_RECONCILIATION_ALLOWED_CALLER_URIS:spiffe://vistay/service/finance}
+    inventory-reconciliation-allowed-caller-uris: ${INVENTORY_RECONCILIATION_ALLOWED_CALLER_URIS:spiffe://vistay/service/property}
     maximum-deadline: ${GRPC_MAXIMUM_DEADLINE:2s}
 
 logging:
