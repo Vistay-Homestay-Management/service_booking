@@ -106,6 +106,58 @@ class PricingGraphQlSchemaTest {
             .contains("MANUAL_OVERRIDE");
     }
 
+    @Test
+    void exposesPublicationActivePreviewAndImmutableSnapshotLifecycle() throws Exception {
+        var schema = new ClassPathResource("graphql/schema.graphqls")
+            .getContentAsString(StandardCharsets.UTF_8);
+        var registry = new SchemaParser().parse(schema);
+
+        var query = registry.getType("Query", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(query.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains("previewPropertyRateProfilePublication",
+                "activePropertyRateProfileVersion", "previewPublishedPropertyPriceQuote",
+                "propertyPriceQuoteSnapshot");
+        assertThat(field(query, "previewPropertyRateProfilePublication")
+            .getInputValueDefinitions()).extracting(input -> input.getName())
+            .containsExactly("rateProfileVersionId");
+        var mutation = registry.getType("Mutation", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(mutation.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains("publishPropertyRateProfileVersion",
+                "createPropertyPriceQuoteSnapshot");
+
+        var publicationInput = registry.getType(
+            "PublishPropertyRateProfileVersionInput", InputObjectTypeDefinition.class)
+            .orElseThrow();
+        assertThat(publicationInput.getInputValueDefinitions())
+            .extracting(field -> field.getName())
+            .containsExactly("idempotencyKey", "rateProfileVersionId",
+                "expectedProfileFingerprint", "expectedCurrentPublicationId",
+                "reason", "correlationId");
+
+        var publication = registry.getType(
+            "PricingProfilePublication", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(publication.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains("previousPublicationId", "publicationRevision",
+                "snapshotSchemaVersion", "profileFingerprint", "authorizationVersion",
+                "permissionCode", "scopeType", "partitionId", "publishedAt", "profile");
+
+        var snapshotInput = registry.getType(
+            "CreatePropertyPriceQuoteSnapshotInput", InputObjectTypeDefinition.class)
+            .orElseThrow();
+        assertThat(snapshotInput.getInputValueDefinitions())
+            .extracting(field -> field.getName())
+            .containsExactly("idempotencyKey", "quote", "expectedRateProfileVersionId",
+                "expectedBaseQuoteFingerprint", "manualOverrideId", "reason",
+                "correlationId");
+        var snapshot = registry.getType(
+            "PropertyPriceQuoteSnapshot", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(snapshot.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains("pricingPublicationId", "rateProfileVersionId", "manualOverrideId",
+                "baseQuoteFingerprint", "publication", "baseQuote", "finalQuote",
+                "actorAdminAccountId", "authorizationVersion", "scopeType",
+                "reason", "correlationId", "createdAt", "expiresAt");
+    }
+
     private graphql.language.FieldDefinition field(
         ObjectTypeDefinition type,
         String name

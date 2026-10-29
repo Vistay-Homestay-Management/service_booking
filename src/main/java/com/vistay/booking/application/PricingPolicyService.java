@@ -259,7 +259,9 @@ public class PricingPolicyService {
             rs.getString("reason"),
             rs.getObject("authored_by_admin_account_id", UUID.class),
             rs.getString("correlation_id"),
-            rs.getObject("authored_at", OffsetDateTime.class).toString(),
+            OffsetDateTime.ofInstant(
+                rs.getObject("authored_at", OffsetDateTime.class).toInstant(),
+                java.time.ZoneOffset.UTC).toString(),
             List.of()
         );
     }

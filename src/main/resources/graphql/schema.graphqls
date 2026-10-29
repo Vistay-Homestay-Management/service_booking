@@ -5,11 +5,17 @@ type Query {
   propertyRateProfileVersion(id: ID!): PropertyRateProfileVersion!
   propertyRateProfileVersions(propertyId: ID!): [PropertyRateProfileVersion!]!
   calculatePropertyPriceQuote(input: CalculatePropertyPriceQuoteInput!): PropertyPriceQuote!
+  previewPropertyRateProfilePublication(rateProfileVersionId: ID!): PricingProfilePublicationPreview!
+  activePropertyRateProfileVersion(propertyId: ID!, checkInDate: String!, checkOutDate: String!): PricingProfilePublication!
+  previewPublishedPropertyPriceQuote(input: PublishedPropertyPriceQuoteInput!): PublishedPropertyPriceQuotePreview!
+  propertyPriceQuoteSnapshot(id: ID!): PropertyPriceQuoteSnapshot!
 }
 
 type Mutation {
   createPropertyRateProfileVersion(input: CreatePropertyRateProfileVersionInput!): PropertyRateProfileVersion!
   applyPropertyPriceOverride(input: ApplyPropertyPriceOverrideInput!): AppliedPropertyPriceOverride!
+  publishPropertyRateProfileVersion(input: PublishPropertyRateProfileVersionInput!): PricingProfilePublication!
+  createPropertyPriceQuoteSnapshot(input: CreatePropertyPriceQuoteSnapshotInput!): PropertyPriceQuoteSnapshot!
 }
 
 type Booking {
@@ -149,6 +155,78 @@ type PricingManualOverride {
   expiresAt: String!
 }
 
+type PricingProfilePublicationPreview {
+  profile: PropertyRateProfileVersion!
+  profileFingerprint: String!
+  published: Boolean!
+  currentPublication: PricingProfilePublication
+  publication: PricingProfilePublication
+}
+
+type PricingProfilePublication {
+  id: ID!
+  idempotencyKey: String!
+  requestHash: String!
+  propertyId: ID!
+  rateProfileVersionId: ID!
+  previousPublicationId: ID
+  publicationRevision: String!
+  profileFingerprint: String!
+  snapshotSchemaVersion: String!
+  actorAdminAccountId: ID!
+  actorAdminProfileId: ID!
+  authorizationVersion: String!
+  permissionCode: String!
+  scopeType: PricingOverrideScopeType!
+  partitionId: ID
+  reason: String!
+  correlationId: String!
+  publishedAt: String!
+  profile: PropertyRateProfileVersion!
+}
+
+type PublishedPropertyPriceQuotePreview {
+  publication: PricingProfilePublication!
+  baseQuote: PropertyPriceQuote!
+}
+
+type PropertyPriceFinalQuote {
+  baseQuote: PropertyPriceQuote!
+  manualOverride: PricingManualOverride
+  precedence: [String!]!
+  components: [PriceComponent!]!
+  lodgingAmount: String!
+  commissionAmount: String!
+  totalAmount: String!
+}
+
+type PropertyPriceQuoteSnapshot {
+  id: ID!
+  idempotencyKey: String!
+  requestHash: String!
+  propertyId: ID!
+  pricingPublicationId: ID!
+  rateProfileVersionId: ID!
+  manualOverrideId: ID
+  baseQuoteFingerprint: String!
+  calculationVersion: String!
+  publication: PricingProfilePublication!
+  baseQuote: PropertyPriceQuote!
+  finalQuote: PropertyPriceFinalQuote!
+  actorAdminAccountId: ID!
+  actorAdminProfileId: ID!
+  authorizationVersion: String!
+  permissionCode: String!
+  scopeType: PricingOverrideScopeType!
+  partitionId: ID
+  reason: String!
+  correlationId: String!
+  status: String!
+  currency: String!
+  createdAt: String!
+  expiresAt: String!
+}
+
 type PricingRuleEvaluation {
   order: Int!
   chargeDate: String
@@ -268,6 +346,35 @@ input ApplyPropertyPriceOverrideInput {
   quote: CalculatePropertyPriceQuoteInput!
   expectedBaseQuoteFingerprint: String!
   targetLodgingAmount: String!
+  reason: String!
+  correlationId: String!
+}
+
+input PublishPropertyRateProfileVersionInput {
+  idempotencyKey: String!
+  rateProfileVersionId: ID!
+  expectedProfileFingerprint: String!
+  expectedCurrentPublicationId: ID
+  reason: String!
+  correlationId: String!
+}
+
+input PublishedPropertyPriceQuoteInput {
+  propertyId: ID!
+  checkInDate: String!
+  checkOutDate: String!
+  guestCount: Int! = 1
+  channel: PricingChannel!
+  staffCreated: Boolean! = false
+  commissionBps: Int
+}
+
+input CreatePropertyPriceQuoteSnapshotInput {
+  idempotencyKey: String!
+  quote: PublishedPropertyPriceQuoteInput!
+  expectedRateProfileVersionId: ID!
+  expectedBaseQuoteFingerprint: String!
+  manualOverrideId: ID
   reason: String!
   correlationId: String!
 }

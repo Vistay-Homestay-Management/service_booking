@@ -40,6 +40,8 @@ spring:
       ssl.truststore.password: ${KAFKA_TRUSTSTORE_PASSWORD:}
     producer:
       acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         enable.idempotence: true
     consumer:
@@ -108,13 +110,18 @@ vistay:
     audience: ${KEYCLOAK_BACKOFFICE_AUDIENCE:vistay-backoffice-api}
   topics:
     authorization-changed: ${AUTHORIZATION_CHANGED_TOPIC:vistay.user.authorization-changed.v1}
+    rate-profile-published: ${RATE_PROFILE_PUBLISHED_TOPIC:vistay.booking.rate-profile-published.v1}
+  outbox:
+    poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
+    send-timeout-seconds: ${OUTBOX_SEND_TIMEOUT_SECONDS:10}
   authorization:
     local-cache-ttl: ${AUTHORIZATION_LOCAL_CACHE_TTL:30s}
     grpc-deadline: ${AUTHORIZATION_GRPC_DEADLINE:2s}
   property:
     partition-deadline: ${PROPERTY_PARTITION_DEADLINE:2s}
   grpc:
-    allowed-caller-uris: ${GRPC_ALLOWED_CALLER_URIS:spiffe://vistay/service/payment}
+    allowed-caller-uris: ${GRPC_ALLOWED_CALLER_URIS:spiffe://vistay/service/payment,spiffe://vistay/service/finance}
+    pricing-reconciliation-allowed-caller-uris: ${PRICING_RECONCILIATION_ALLOWED_CALLER_URIS:spiffe://vistay/service/finance}
     maximum-deadline: ${GRPC_MAXIMUM_DEADLINE:2s}
 
 logging:

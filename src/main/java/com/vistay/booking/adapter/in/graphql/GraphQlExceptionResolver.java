@@ -17,10 +17,13 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
             var type = switch (error.code()) {
                 case "UNAUTHENTICATED", "INVALID_TOKEN" -> ErrorType.UNAUTHORIZED;
                 case "FORBIDDEN_PRICING_SCOPE" -> ErrorType.FORBIDDEN;
-                case "PRICING_VERSION_NOT_FOUND", "PRICING_OVERRIDE_NOT_FOUND" ->
+                case "PRICING_VERSION_NOT_FOUND", "PRICING_OVERRIDE_NOT_FOUND",
+                    "PRICING_PUBLICATION_NOT_FOUND", "PRICING_QUOTE_SNAPSHOT_NOT_FOUND" ->
                     ErrorType.NOT_FOUND;
                 case "PROPERTY_PARTITION_UNAVAILABLE", "INVALID_STORED_PRICING_POLICY",
-                    "INVALID_STORED_PRICING_OVERRIDE" ->
+                    "INVALID_STORED_PRICING_OVERRIDE",
+                    "INVALID_STORED_PRICING_PUBLICATION",
+                    "INVALID_STORED_PRICING_SNAPSHOT" ->
                     ErrorType.INTERNAL_ERROR;
                 default -> ErrorType.BAD_REQUEST;
             };

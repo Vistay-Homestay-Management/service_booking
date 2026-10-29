@@ -1,6 +1,7 @@
 package com.vistay.booking.config;
 
 import io.grpc.Context;
+import io.grpc.Contexts;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -21,6 +22,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class GrpcTrustBoundaryInterceptor implements ServerInterceptor {
+    public static final Context.Key<String> AUTHENTICATED_CALLER_URI =
+        Context.key("vistay-authenticated-grpc-caller-uri");
     private static final int URI_SAN_TYPE = 6;
 
     private final Set<String> allowedCallerUris;
@@ -46,7 +49,11 @@ public class GrpcTrustBoundaryInterceptor implements ServerInterceptor {
             call.close(rejection, new Metadata());
             return new ServerCall.Listener<>() {};
         }
-        return next.startCall(call, headers);
+        var session = call.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+        var callerUri = allowedCallerUri(session);
+        return Contexts.interceptCall(
+            Context.current().withValue(AUTHENTICATED_CALLER_URI, callerUri),
+            call, headers, next);
     }
 
     Status validate(ServerCall<?, ?> call, Deadline deadline) {

@@ -1,16 +1,21 @@
 package com.vistay.booking.config;
 
 import io.grpc.Attributes;
+import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
+import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLSession;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +33,25 @@ class GrpcTrustBoundaryInterceptorTest {
         assertThat(interceptor.validate(
             callWithUriSan(PAYMENT_CALLER), Deadline.after(1500, TimeUnit.MILLISECONDS)))
             .isNull();
+    }
+
+    @Test
+    void exposesTheAuthenticatedSpiffeIdentityToTheGrpcServiceContext() throws Exception {
+        var observedCaller = new AtomicReference<String>();
+        ServerCallHandler<Object, Object> next = (call, headers) -> {
+            observedCaller.set(GrpcTrustBoundaryInterceptor.AUTHENTICATED_CALLER_URI.get());
+            return new ServerCall.Listener<>() {};
+        };
+        var scheduler = Executors.newSingleThreadScheduledExecutor();
+        try {
+            Context.current().withDeadlineAfter(1500, TimeUnit.MILLISECONDS, scheduler)
+                .call(() -> interceptor.interceptCall(
+                    callWithUriSan(PAYMENT_CALLER), new Metadata(), next));
+        } finally {
+            scheduler.shutdownNow();
+        }
+
+        assertThat(observedCaller).hasValue(PAYMENT_CALLER);
     }
 
     @Test
