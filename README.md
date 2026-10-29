@@ -67,3 +67,24 @@ property revision, immutable command evidence, audit row, and
 `vistay.booking.inventory-block-changed.v1` outbox event. The database exclusion
 constraint remains the final overlap authority. SCRUM-361, rather than this
 write API, owns stale/expired/orphan repair and revision-gap reconciliation.
+
+### Inventory overlap concurrency certification
+
+`InventoryOverlapConcurrencyIntegrationTest` exercises the GiST exclusion
+constraint with independent JDBC transactions. An overlapping TENTATIVE or
+ACTIVE writer waits for the uncommitted winner: winner commit produces SQLSTATE
+`23P01` for the loser, while winner rollback lets the waiter commit. The suite
+also proves adjacent half-open ranges and overlapping ranges on different
+properties can both commit, and asserts the exact durable block count plus
+`inventory_property_revisions` after every path.
+
+Run the focused certification with:
+
+```powershell
+.\gradlew.bat test --tests `
+  com.vistay.booking.application.InventoryOverlapConcurrencyIntegrationTest
+```
+
+Application availability checks are observational only. All Booking-owned
+writers must persist their block in the same transaction as their owning state
+change and treat `ex_inventory_block_overlap` as the final commit authority.
