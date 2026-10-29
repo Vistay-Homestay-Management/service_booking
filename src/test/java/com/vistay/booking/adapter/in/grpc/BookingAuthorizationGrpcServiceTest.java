@@ -2,6 +2,8 @@ package com.vistay.booking.adapter.in.grpc;
 
 import com.vistay.booking.application.BookingAuthorizationRecordReader;
 import com.vistay.booking.application.BookingAuthorizationRecordReader.Record;
+import com.vistay.booking.application.PropertyPartitionClient;
+import com.vistay.contracts.booking.v1.BookingPartitionResolutionStatus;
 import com.vistay.contracts.booking.v1.GetBookingAuthorizationRecordRequest;
 import com.vistay.contracts.booking.v1.GetBookingAuthorizationRecordResponse;
 import io.grpc.Status;
@@ -25,12 +27,16 @@ class BookingAuthorizationGrpcServiceTest {
         var propertyId = UUID.randomUUID();
         var assignedId = UUID.randomUUID();
         var attributedId = UUID.randomUUID();
+        var branchId = UUID.randomUUID();
         var records = mock(BookingAuthorizationRecordReader.class);
+        var propertyPartitions = mock(PropertyPartitionClient.class);
         when(records.find(bookingId)).thenReturn(Optional.of(new Record(
             bookingId, customerId, propertyId, assignedId, List.of(attributedId))));
+        when(propertyPartitions.resolve(propertyId)).thenReturn(
+            PropertyPartitionClient.Resolution.mapped(branchId, 12));
         var observer = new CapturingObserver<GetBookingAuthorizationRecordResponse>();
 
-        new BookingAuthorizationGrpcService(records).getBookingAuthorizationRecord(
+        new BookingAuthorizationGrpcService(records, propertyPartitions).getBookingAuthorizationRecord(
             GetBookingAuthorizationRecordRequest.newBuilder()
                 .setBookingId(bookingId.toString()).build(), observer);
 
@@ -41,22 +47,53 @@ class BookingAuthorizationGrpcServiceTest {
         assertThat(observer.value.getAssignedAdminUserId()).isEqualTo(assignedId.toString());
         assertThat(observer.value.getActiveAttributedAdminUserIdsList())
             .containsExactly(attributedId.toString());
+        assertThat(observer.value.getBranchId()).isEqualTo(branchId.toString());
+        assertThat(observer.value.getPartitionMembershipVersion()).isEqualTo(12);
+        assertThat(observer.value.getPartitionResolutionStatus()).isEqualTo(
+            BookingPartitionResolutionStatus.BOOKING_PARTITION_RESOLUTION_STATUS_MAPPED);
     }
 
     @Test
     void returnsNotFoundWithoutLeakingARecord() {
         var bookingId = UUID.randomUUID();
         var records = mock(BookingAuthorizationRecordReader.class);
+        var propertyPartitions = mock(PropertyPartitionClient.class);
         when(records.find(bookingId)).thenReturn(Optional.empty());
         var observer = new CapturingObserver<GetBookingAuthorizationRecordResponse>();
 
-        new BookingAuthorizationGrpcService(records).getBookingAuthorizationRecord(
+        new BookingAuthorizationGrpcService(records, propertyPartitions).getBookingAuthorizationRecord(
             GetBookingAuthorizationRecordRequest.newBuilder()
                 .setBookingId(bookingId.toString()).build(), observer);
 
         assertThat(((StatusRuntimeException) observer.error).getStatus().getCode())
             .isEqualTo(Status.Code.NOT_FOUND);
         assertThat(observer.value).isNull();
+    }
+
+    @Test
+    void preservesExplicitMissingAndUnavailablePartitionStates() {
+        var bookingId = UUID.randomUUID();
+        var propertyId = UUID.randomUUID();
+        var records = mock(BookingAuthorizationRecordReader.class);
+        when(records.find(bookingId)).thenReturn(Optional.of(new Record(
+            bookingId, null, propertyId, null, List.of())));
+        var partitions = mock(PropertyPartitionClient.class);
+        var observer = new CapturingObserver<GetBookingAuthorizationRecordResponse>();
+
+        when(partitions.resolve(propertyId)).thenReturn(PropertyPartitionClient.Resolution.missing());
+        new BookingAuthorizationGrpcService(records, partitions).getBookingAuthorizationRecord(
+            GetBookingAuthorizationRecordRequest.newBuilder().setBookingId(bookingId.toString()).build(),
+            observer);
+        assertThat(observer.value.getPartitionResolutionStatus()).isEqualTo(
+            BookingPartitionResolutionStatus.BOOKING_PARTITION_RESOLUTION_STATUS_MISSING);
+
+        observer = new CapturingObserver<>();
+        when(partitions.resolve(propertyId)).thenReturn(PropertyPartitionClient.Resolution.unavailable());
+        new BookingAuthorizationGrpcService(records, partitions).getBookingAuthorizationRecord(
+            GetBookingAuthorizationRecordRequest.newBuilder().setBookingId(bookingId.toString()).build(),
+            observer);
+        assertThat(observer.value.getPartitionResolutionStatus()).isEqualTo(
+            BookingPartitionResolutionStatus.BOOKING_PARTITION_RESOLUTION_STATUS_UNAVAILABLE);
     }
 
     private static final class CapturingObserver<T> implements StreamObserver<T> {

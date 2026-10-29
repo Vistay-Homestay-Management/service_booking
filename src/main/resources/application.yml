@@ -68,6 +68,10 @@ spring:
           target: ${USER_GRPC_ADDRESS:static://localhost:9090}
           ssl:
             bundle: ${USER_GRPC_SSL_BUNDLE:grpc-user-client}
+        property:
+          target: ${PROPERTY_GRPC_ADDRESS:static://localhost:9092}
+          ssl:
+            bundle: ${PROPERTY_GRPC_SSL_BUNDLE:grpc-user-client}
   ssl:
     bundle:
       pem:
@@ -107,6 +111,8 @@ vistay:
   authorization:
     local-cache-ttl: ${AUTHORIZATION_LOCAL_CACHE_TTL:30s}
     grpc-deadline: ${AUTHORIZATION_GRPC_DEADLINE:2s}
+  property:
+    partition-deadline: ${PROPERTY_PARTITION_DEADLINE:2s}
   grpc:
     allowed-caller-uris: ${GRPC_ALLOWED_CALLER_URIS:spiffe://vistay/service/payment}
     maximum-deadline: ${GRPC_MAXIMUM_DEADLINE:2s}
