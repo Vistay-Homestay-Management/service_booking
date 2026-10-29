@@ -2,6 +2,12 @@ type Query {
   bookingServiceInfo: BookingServiceInfo!
   booking(id: ID!): Booking!
   bookings(status: String, limit: Int = 50): [Booking!]!
+  propertyRateProfileVersion(id: ID!): PropertyRateProfileVersion!
+  propertyRateProfileVersions(propertyId: ID!): [PropertyRateProfileVersion!]!
+}
+
+type Mutation {
+  createPropertyRateProfileVersion(input: CreatePropertyRateProfileVersionInput!): PropertyRateProfileVersion!
 }
 
 type Booking {
@@ -18,4 +24,93 @@ type Booking {
 type BookingServiceInfo {
   name: String!
   version: String!
+}
+
+type PropertyRateProfileVersion {
+  id: ID!
+  propertyId: ID!
+  version: Int!
+  effectiveFrom: String!
+  effectiveToExclusive: String
+  baseDailyRate: String!
+  mediumDailyFactorBps: Int!
+  longDailyFactorBps: Int!
+  currency: String!
+  checkInTime: String!
+  checkOutTime: String!
+  turnoverMinutes: Int!
+  quoteTtlMinutes: Int!
+  commissionDefaultBps: Int!
+  commissionMaxBps: Int!
+  reason: String!
+  authoredByAdminAccountId: ID!
+  correlationId: String
+  authoredAt: String!
+  rules: [PricingRuleVersion!]!
+}
+
+type PricingRuleVersion {
+  id: ID!
+  code: String!
+  name: String!
+  effectiveFrom: String!
+  effectiveToExclusive: String
+  priority: Int!
+  daysOfWeek: [Int!]!
+  channels: [PricingChannel!]!
+  minimumStayDays: Int
+  maximumStayDays: Int
+  minimumGuests: Int
+  maximumGuests: Int
+  actionType: PricingActionType!
+  actionValue: String!
+}
+
+enum PricingChannel {
+  ADMIN_PORTAL
+  CUSTOMER_WEB
+  OTA
+}
+
+enum PricingActionType {
+  FIXED_DAILY_RATE
+  PERCENT_DISCOUNT
+  FIXED_DISCOUNT
+  PERCENT_SURCHARGE
+  FIXED_SURCHARGE
+}
+
+input CreatePropertyRateProfileVersionInput {
+  idempotencyKey: String!
+  propertyId: ID!
+  effectiveFrom: String!
+  effectiveToExclusive: String
+  baseDailyRate: String!
+  mediumDailyFactorBps: Int = 7000
+  longDailyFactorBps: Int = 5500
+  checkInTime: String = "14:00"
+  checkOutTime: String = "12:00"
+  turnoverMinutes: Int = 120
+  quoteTtlMinutes: Int = 15
+  commissionDefaultBps: Int = 500
+  commissionMaxBps: Int = 2000
+  reason: String!
+  correlationId: String
+  rules: [PricingRuleVersionInput!]! = []
+}
+
+input PricingRuleVersionInput {
+  code: String!
+  name: String!
+  effectiveFrom: String!
+  effectiveToExclusive: String
+  priority: Int!
+  daysOfWeek: [Int!]! = []
+  channels: [PricingChannel!]! = []
+  minimumStayDays: Int
+  maximumStayDays: Int
+  minimumGuests: Int
+  maximumGuests: Int
+  actionType: PricingActionType!
+  actionValue: String!
 }

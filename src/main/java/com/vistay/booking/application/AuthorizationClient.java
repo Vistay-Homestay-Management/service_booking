@@ -71,6 +71,7 @@ public class AuthorizationClient {
                     .setMinimumAuthorizationVersion(minimumVersion)
                     .build());
             Map<String, Set<Scope>> grants = new ConcurrentHashMap<>();
+            Map<String, Set<Partition>> partitions = new ConcurrentHashMap<>();
             response.getGrantsList().forEach(grant -> {
                 Set<Scope> scopes = new LinkedHashSet<>();
                 grant.getScopesList().stream()
@@ -78,10 +79,21 @@ public class AuthorizationClient {
                     .forEach(value -> scopes.add(Scope.valueOf(
                         value.name().substring("DATA_SCOPE_TYPE_".length()))));
                 grants.put(grant.getPermissionCode(), Set.copyOf(scopes));
+                Set<Partition> permissionPartitions = new LinkedHashSet<>();
+                grant.getPartitionsList().forEach(partition -> {
+                    try {
+                        permissionPartitions.add(new Partition(
+                            partition.getPartitionType(), UUID.fromString(partition.getPartitionId())));
+                    } catch (IllegalArgumentException malformedPartition) {
+                        throw error("AUTHORIZATION_UNAVAILABLE",
+                            "Authorization service returned a malformed partition grant");
+                    }
+                });
+                partitions.put(grant.getPermissionCode(), Set.copyOf(permissionPartitions));
             });
             var snapshot = new Snapshot(response.getActive(),
                 response.hasProfileId() ? UUID.fromString(response.getProfileId()) : null,
-                response.getAuthorizationVersion(), Map.copyOf(grants));
+                response.getAuthorizationVersion(), Map.copyOf(grants), Map.copyOf(partitions));
             cache.put(accountId, new CachedSnapshot(snapshot, now.plus(cacheTtl)));
             return snapshot;
         } catch (StatusRuntimeException unavailable) {
@@ -107,10 +119,14 @@ public class AuthorizationClient {
             .errorClassification(classification).extensions(Map.of("code", code)).build();
     }
 
-    public enum Scope { SELF, OWN, ASSIGNED, ALL }
+    public enum Scope { SELF, OWN, ASSIGNED, ALL, PARTITION }
+    public record Partition(String type, UUID id) {}
     public record Snapshot(boolean active, UUID profileId, long authorizationVersion,
-        Map<String, Set<Scope>> grants) {
+        Map<String, Set<Scope>> grants, Map<String, Set<Partition>> partitionGrants) {
         public Set<Scope> scopes(String permission) { return grants.getOrDefault(permission, Set.of()); }
+        public Set<Partition> partitions(String permission) {
+            return partitionGrants.getOrDefault(permission, Set.of());
+        }
     }
     private record CachedSnapshot(Snapshot snapshot, Instant expiresAt) {}
 }
