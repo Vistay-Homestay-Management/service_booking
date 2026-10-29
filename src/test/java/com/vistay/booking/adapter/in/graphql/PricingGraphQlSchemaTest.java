@@ -158,6 +158,45 @@ class PricingGraphQlSchemaTest {
                 "reason", "correlationId", "createdAt", "expiresAt");
     }
 
+    @Test
+    void exposesSanitizedExactUnitInventoryObservation() throws Exception {
+        var schema = new ClassPathResource("graphql/schema.graphqls")
+            .getContentAsString(StandardCharsets.UTF_8);
+        var registry = new SchemaParser().parse(schema);
+
+        var query = registry.getType("Query", ObjectTypeDefinition.class).orElseThrow();
+        var availability = field(query, "propertyAvailability");
+        assertThat(availability.getInputValueDefinitions()).extracting(input -> input.getName())
+            .containsExactly("input");
+
+        var input = registry.getType(
+            "PropertyAvailabilityInput", InputObjectTypeDefinition.class).orElseThrow();
+        assertThat(input.getInputValueDefinitions()).extracting(field -> field.getName())
+            .containsExactly("propertyId", "checkInDate", "checkOutDate");
+
+        var result = registry.getType(
+            "PropertyAvailabilityObservation", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(result.getFieldDefinitions()).extracting(field -> field.getName())
+            .containsExactly("propertyId", "checkInDate", "checkOutDate", "available",
+                "inventoryRevision", "branchId", "propertyMembershipVersion",
+                "observedAt", "overlaps");
+        var overlap = registry.getType(
+            "InventoryAvailabilityOverlap", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(overlap.getFieldDefinitions()).extracting(field -> field.getName())
+            .containsExactly("type", "status", "startDate", "endDateExclusive",
+                "channelProvider")
+            .doesNotContain("bookingId", "externalRef", "reason", "guestName", "customerId");
+
+        var types = registry.getType("InventoryBlockType", EnumTypeDefinition.class).orElseThrow();
+        assertThat(types.getEnumValueDefinitions()).extracting(value -> value.getName())
+            .containsExactly("BOOKING", "MAINTENANCE", "CLEANING", "OWNER_USE",
+                "MANUAL", "CHANNEL");
+        var statuses = registry.getType(
+            "InventoryBlockStatus", EnumTypeDefinition.class).orElseThrow();
+        assertThat(statuses.getEnumValueDefinitions()).extracting(value -> value.getName())
+            .containsExactly("TENTATIVE", "ACTIVE", "RELEASED", "CANCELLED");
+    }
+
     private graphql.language.FieldDefinition field(
         ObjectTypeDefinition type,
         String name

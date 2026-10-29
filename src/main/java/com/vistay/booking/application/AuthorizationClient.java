@@ -4,12 +4,14 @@ import com.vistay.contracts.common.v1.AccountRef;
 import com.vistay.contracts.common.v1.AccountType;
 import com.vistay.contracts.common.v1.DataScopeType;
 import com.vistay.contracts.user.v1.GetAuthorizationSnapshotRequest;
+import com.vistay.contracts.user.v1.GetAuthorizationSnapshotResponse;
 import com.vistay.contracts.user.v1.UserAuthorizationServiceGrpc;
 import graphql.GraphqlErrorException;
 import io.grpc.StatusRuntimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -45,11 +47,24 @@ public class AuthorizationClient {
     }
 
     public Snapshot require(UUID accountId, String permission) {
-        var snapshot = get(accountId);
+        return require(accountId, permission, null);
+    }
+
+    public Snapshot require(UUID accountId, String permission, String forbiddenCode) {
+        return enforce(get(accountId), permission, forbiddenCode);
+    }
+
+    static Snapshot enforce(Snapshot snapshot, String permission, String forbiddenCode) {
         if (!snapshot.active() || snapshot.profileId() == null) {
+            if (forbiddenCode != null) {
+                throw error(forbiddenCode, "Inventory read is not authorized");
+            }
             throw error("PROFILE_INACTIVE", "Administrator profile is inactive");
         }
         if (!snapshot.grants().containsKey(permission) || snapshot.grants().get(permission).isEmpty()) {
+            if (forbiddenCode != null) {
+                throw error(forbiddenCode, "Inventory read is not authorized");
+            }
             throw error("FORBIDDEN_PERMISSION", "Missing permission " + permission);
         }
         return snapshot;
@@ -70,34 +85,80 @@ public class AuthorizationClient {
                         .setAccountType(AccountType.ACCOUNT_TYPE_ADMIN).build())
                     .setMinimumAuthorizationVersion(minimumVersion)
                     .build());
-            Map<String, Set<Scope>> grants = new ConcurrentHashMap<>();
-            Map<String, Set<Partition>> partitions = new ConcurrentHashMap<>();
-            response.getGrantsList().forEach(grant -> {
-                Set<Scope> scopes = new LinkedHashSet<>();
-                grant.getScopesList().stream()
-                    .filter(value -> value != DataScopeType.DATA_SCOPE_TYPE_UNSPECIFIED)
-                    .forEach(value -> scopes.add(Scope.valueOf(
-                        value.name().substring("DATA_SCOPE_TYPE_".length()))));
-                grants.put(grant.getPermissionCode(), Set.copyOf(scopes));
-                Set<Partition> permissionPartitions = new LinkedHashSet<>();
-                grant.getPartitionsList().forEach(partition -> {
-                    try {
-                        permissionPartitions.add(new Partition(
-                            partition.getPartitionType(), UUID.fromString(partition.getPartitionId())));
-                    } catch (IllegalArgumentException malformedPartition) {
-                        throw error("AUTHORIZATION_UNAVAILABLE",
-                            "Authorization service returned a malformed partition grant");
-                    }
-                });
-                partitions.put(grant.getPermissionCode(), Set.copyOf(permissionPartitions));
-            });
-            var snapshot = new Snapshot(response.getActive(),
-                response.hasProfileId() ? UUID.fromString(response.getProfileId()) : null,
-                response.getAuthorizationVersion(), Map.copyOf(grants), Map.copyOf(partitions));
+            var snapshot = decode(response);
             cache.put(accountId, new CachedSnapshot(snapshot, now.plus(cacheTtl)));
             return snapshot;
         } catch (StatusRuntimeException unavailable) {
             throw error("AUTHORIZATION_UNAVAILABLE", "Authorization service is unavailable");
+        }
+    }
+
+    static Snapshot decode(GetAuthorizationSnapshotResponse response) {
+        try {
+            if (response == null || response.getAuthorizationVersion() < 0) {
+                throw new IllegalArgumentException("invalid authorization version");
+            }
+            UUID profileId = response.hasProfileId()
+                ? UUID.fromString(response.getProfileId()) : null;
+            if (response.getActive() && profileId == null) {
+                throw new IllegalArgumentException("active snapshot has no profile");
+            }
+            var roles = new LinkedHashSet<String>();
+            for (var role : response.getRolesList()) {
+                if (role == null || role.isBlank()) {
+                    throw new IllegalArgumentException("blank role");
+                }
+                roles.add(role);
+            }
+            var declaredPermissions = new LinkedHashSet<String>();
+            for (var permission : response.getPermissionsList()) {
+                if (permission == null || permission.isBlank()
+                    || !declaredPermissions.add(permission)) {
+                    throw new IllegalArgumentException("invalid permission list");
+                }
+            }
+
+            Map<String, Set<Scope>> grants = new LinkedHashMap<>();
+            Map<String, Set<Partition>> partitions = new LinkedHashMap<>();
+            for (var grant : response.getGrantsList()) {
+                var permission = grant.getPermissionCode();
+                if (permission == null || permission.isBlank() || grants.containsKey(permission)) {
+                    throw new IllegalArgumentException("invalid permission grant");
+                }
+                Set<Scope> scopes = new LinkedHashSet<>();
+                for (var value : grant.getScopesList()) {
+                    if (value == DataScopeType.DATA_SCOPE_TYPE_UNSPECIFIED) {
+                        throw new IllegalArgumentException("unspecified scope");
+                    }
+                    scopes.add(Scope.valueOf(
+                        value.name().substring("DATA_SCOPE_TYPE_".length())));
+                }
+                if (scopes.isEmpty()) {
+                    throw new IllegalArgumentException("permission grant has no scope");
+                }
+                Set<Partition> permissionPartitions = new LinkedHashSet<>();
+                for (var partition : grant.getPartitionsList()) {
+                    if (partition.getPartitionType().isBlank()) {
+                        throw new IllegalArgumentException("blank partition type");
+                    }
+                    permissionPartitions.add(new Partition(partition.getPartitionType(),
+                        UUID.fromString(partition.getPartitionId())));
+                }
+                if (!permissionPartitions.isEmpty() && !scopes.contains(Scope.PARTITION)) {
+                    throw new IllegalArgumentException("partition grant has no partition scope");
+                }
+                grants.put(permission, Set.copyOf(scopes));
+                partitions.put(permission, Set.copyOf(permissionPartitions));
+            }
+            if (!declaredPermissions.equals(grants.keySet())) {
+                throw new IllegalArgumentException("permission evidence is inconsistent");
+            }
+            return new Snapshot(response.getActive(), profileId,
+                response.getAuthorizationVersion(), Map.copyOf(grants),
+                Map.copyOf(partitions), Set.copyOf(roles));
+        } catch (RuntimeException malformed) {
+            throw error("AUTHORIZATION_UNAVAILABLE",
+                "Authorization service returned an invalid snapshot");
         }
     }
 
@@ -122,7 +183,18 @@ public class AuthorizationClient {
     public enum Scope { SELF, OWN, ASSIGNED, ALL, PARTITION }
     public record Partition(String type, UUID id) {}
     public record Snapshot(boolean active, UUID profileId, long authorizationVersion,
-        Map<String, Set<Scope>> grants, Map<String, Set<Partition>> partitionGrants) {
+        Map<String, Set<Scope>> grants, Map<String, Set<Partition>> partitionGrants,
+        Set<String> roles) {
+        public Snapshot(
+            boolean active,
+            UUID profileId,
+            long authorizationVersion,
+            Map<String, Set<Scope>> grants,
+            Map<String, Set<Partition>> partitionGrants
+        ) {
+            this(active, profileId, authorizationVersion, grants, partitionGrants, Set.of());
+        }
+
         public Set<Scope> scopes(String permission) { return grants.getOrDefault(permission, Set.of()); }
         public Set<Partition> partitions(String permission) {
             return partitionGrants.getOrDefault(permission, Set.of());

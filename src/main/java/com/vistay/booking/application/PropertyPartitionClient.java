@@ -5,7 +5,7 @@ import java.util.UUID;
 public interface PropertyPartitionClient {
     Resolution resolve(UUID propertyId);
 
-    enum Status { MAPPED, MISSING, UNAVAILABLE }
+    enum Status { MAPPED, NOT_FOUND, UNMAPPED, UNAVAILABLE }
 
     record Resolution(Status status, UUID branchId, long membershipVersion) {
         public static Resolution mapped(UUID branchId, long membershipVersion) {
@@ -13,7 +13,15 @@ public interface PropertyPartitionClient {
         }
 
         public static Resolution missing() {
-            return new Resolution(Status.MISSING, null, 0);
+            return unmapped();
+        }
+
+        public static Resolution notFound() {
+            return new Resolution(Status.NOT_FOUND, null, 0);
+        }
+
+        public static Resolution unmapped() {
+            return new Resolution(Status.UNMAPPED, null, 0);
         }
 
         public static Resolution unavailable() {

@@ -21,3 +21,28 @@ The GraphQL endpoint exposes immutable, effective-dated pricing authoring and ca
 `propertyId` identifies the exact rentable apartment/unit in Property. Prices are whole VND amounts represented as strings at the API boundary. Every write requires an idempotency key, reason, and correlation ID. Explicit-version calculation remains a pure draft preview; published preview and snapshot creation select active pricing server-side. Historical snapshots are read from stored evidence and are never recalculated from current rules.
 
 The canonical v1 defaults and ownership decisions are documented in `contracts/docs/pricing-v1-policy.md`.
+
+## Inventory availability API
+
+`propertyAvailability(input: PropertyAvailabilityInput!)` is an
+authenticated, read-only GraphQL observation for an exact rentable unit. It
+requires `inventory:read`, always resolves the Property-owned branch (including
+for `ALL` grants), and accepts only global `ALL` or a matching
+`PARTITION(BRANCH, ...)` grant. Unknown Property records and unavailable
+Property/authorization dependencies fail closed.
+
+The boundary uses the stable `inventory-v1` failures
+`INVALID_INVENTORY_RANGE`, `UNAUTHENTICATED`, `INVENTORY_READ_FORBIDDEN`,
+`PROPERTY_NOT_FOUND`, `PROPERTY_PARTITION_UNMAPPED`,
+`PROPERTY_PARTITION_UNAVAILABLE`, `AUTHORIZATION_UNAVAILABLE`, and
+`INVENTORY_OBSERVATION_FAILED`.
+
+The range is half-open `[checkInDate, checkOutDate)`. `TENTATIVE` and `ACTIVE`
+BOOKING, MAINTENANCE, CLEANING, OWNER_USE, MANUAL, and CHANNEL rows block the
+unit; `RELEASED` and `CANCELLED` rows are returned only as sanitized historical
+overlap evidence and do not block it. The response contains the monotonic
+per-property inventory revision, Property branch/membership version, observation
+time, and sanitized type/status/range/channel-provider evidence. It never
+contains booking IDs, external channel references, reasons, guest/customer data,
+or other PII. This read creates no hold; booking commands must revalidate and
+rely on the database exclusion constraint for concurrency safety.

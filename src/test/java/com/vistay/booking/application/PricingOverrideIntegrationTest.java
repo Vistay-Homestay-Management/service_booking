@@ -68,7 +68,7 @@ class PricingOverrideIntegrationTest {
             .load()
             .migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.targetSchemaVersion).isEqualTo("5");
+        assertThat(result.targetSchemaVersion).isEqualTo("6");
         jdbc = JdbcClient.create(dataSource);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
     }

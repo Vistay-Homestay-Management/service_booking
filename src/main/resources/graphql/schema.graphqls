@@ -9,6 +9,7 @@ type Query {
   activePropertyRateProfileVersion(propertyId: ID!, checkInDate: String!, checkOutDate: String!): PricingProfilePublication!
   previewPublishedPropertyPriceQuote(input: PublishedPropertyPriceQuoteInput!): PublishedPropertyPriceQuotePreview!
   propertyPriceQuoteSnapshot(id: ID!): PropertyPriceQuoteSnapshot!
+  propertyAvailability(input: PropertyAvailabilityInput!): PropertyAvailabilityObservation!
 }
 
 type Mutation {
@@ -32,6 +33,48 @@ type Booking {
 type BookingServiceInfo {
   name: String!
   version: String!
+}
+
+input PropertyAvailabilityInput {
+  propertyId: ID!
+  checkInDate: String!
+  checkOutDate: String!
+}
+
+type PropertyAvailabilityObservation {
+  propertyId: ID!
+  checkInDate: String!
+  checkOutDate: String!
+  available: Boolean!
+  inventoryRevision: String!
+  branchId: ID!
+  propertyMembershipVersion: String!
+  observedAt: String!
+  overlaps: [InventoryAvailabilityOverlap!]!
+}
+
+type InventoryAvailabilityOverlap {
+  type: InventoryBlockType!
+  status: InventoryBlockStatus!
+  startDate: String!
+  endDateExclusive: String!
+  channelProvider: String
+}
+
+enum InventoryBlockType {
+  BOOKING
+  MAINTENANCE
+  CLEANING
+  OWNER_USE
+  MANUAL
+  CHANNEL
+}
+
+enum InventoryBlockStatus {
+  TENTATIVE
+  ACTIVE
+  RELEASED
+  CANCELLED
 }
 
 type PropertyRateProfileVersion {

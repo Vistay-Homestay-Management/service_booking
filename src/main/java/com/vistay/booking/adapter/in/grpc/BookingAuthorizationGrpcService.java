@@ -71,7 +71,7 @@ public class BookingAuthorizationGrpcService
                 .setPartitionResolutionStatus(
                     BookingPartitionResolutionStatus.BOOKING_PARTITION_RESOLUTION_STATUS_MAPPED)
                 .setPartitionMembershipVersion(partition.membershipVersion());
-            case MISSING -> response.setPartitionResolutionStatus(
+            case NOT_FOUND, UNMAPPED -> response.setPartitionResolutionStatus(
                 BookingPartitionResolutionStatus.BOOKING_PARTITION_RESOLUTION_STATUS_MISSING);
             case UNAVAILABLE -> response.setPartitionResolutionStatus(
                 BookingPartitionResolutionStatus.BOOKING_PARTITION_RESOLUTION_STATUS_UNAVAILABLE);
