@@ -404,7 +404,7 @@ public class PricingQuoteCalculator {
     public enum RuleEvaluationStatus { MATCHED, SKIPPED, SUPERSEDED }
     public enum PriceComponentType {
         PROFILE_BASE_RATE, FIXED_DAILY_RATE, STAY_PRODUCT_RATE,
-        RULE_DISCOUNT, RULE_SURCHARGE, COMMISSION
+        RULE_DISCOUNT, RULE_SURCHARGE, MANUAL_OVERRIDE, COMMISSION
     }
 
     public record RuleEvaluation(

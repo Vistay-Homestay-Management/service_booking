@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import graphql.language.EnumTypeDefinition;
 import graphql.language.InputObjectTypeDefinition;
+import graphql.language.NonNullType;
 import graphql.language.ObjectTypeDefinition;
+import graphql.language.TypeName;
 import graphql.schema.idl.SchemaParser;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -41,5 +43,76 @@ class PricingGraphQlSchemaTest {
         var stayProduct = registry.getType("StayProduct", EnumTypeDefinition.class).orElseThrow();
         assertThat(stayProduct.getEnumValueDefinitions()).extracting(value -> value.getName())
             .containsExactly("SHORT", "MEDIUM", "LONG");
+    }
+
+    @Test
+    void exposesManualOverrideMutationImmutableEvidenceAndApprovalScope() throws Exception {
+        var schema = new ClassPathResource("graphql/schema.graphqls")
+            .getContentAsString(StandardCharsets.UTF_8);
+        var registry = new SchemaParser().parse(schema);
+
+        var mutation = registry.getType("Mutation", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(mutation.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains("applyPropertyPriceOverride");
+
+        var input = registry.getType(
+            "ApplyPropertyPriceOverrideInput", InputObjectTypeDefinition.class).orElseThrow();
+        assertThat(input.getInputValueDefinitions()).extracting(field -> field.getName())
+            .containsExactly("idempotencyKey", "quote", "expectedBaseQuoteFingerprint",
+                "targetLodgingAmount", "reason", "correlationId");
+
+        var result = registry.getType(
+            "AppliedPropertyPriceOverride", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(result.getFieldDefinitions()).extracting(field -> field.getName())
+            .containsExactly("baseQuote", "manualOverride", "finalPrecedence",
+                "finalComponents", "finalLodgingAmount", "finalCommissionAmount",
+                "finalTotalAmount");
+
+        var evidence = registry.getType(
+            "PricingManualOverride", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(evidence.getFieldDefinitions()).extracting(field -> field.getName())
+            .contains(
+                "idempotencyKey", "baseQuoteFingerprint", "calculationVersion",
+                "requestHash",
+                "beforeLodgingAmount", "targetLodgingAmount", "adjustmentAmount",
+                "reductionBps", "beforeCommissionAmount", "afterCommissionAmount",
+                "largeApprovalRequired", "actorAdminAccountId", "actorAdminProfileId",
+                "authorizationVersion", "overridePermissionCode", "overrideScopeType",
+                "overridePartitionId", "largeApprovalAuthorizationVersion",
+                "largeApprovalPermissionCode", "largeApprovalScopeType",
+                "largeApprovalPartitionId", "reason", "correlationId", "expiresAt"
+            );
+        assertThat(field(evidence, "authorizationVersion").getType())
+            .isInstanceOfSatisfying(NonNullType.class, type ->
+                assertThat(((TypeName) type.getType()).getName()).isEqualTo("String"));
+        assertThat(field(evidence, "overrideScopeType").getType())
+            .isInstanceOfSatisfying(NonNullType.class, type ->
+                assertThat(((TypeName) type.getType()).getName())
+                    .isEqualTo("PricingOverrideScopeType"));
+        assertThat(field(evidence, "largeApprovalAuthorizationVersion").getType())
+            .isInstanceOfSatisfying(TypeName.class, type ->
+                assertThat(type.getName()).isEqualTo("String"));
+        assertThat(field(evidence, "largeApprovalScopeType").getType())
+            .isInstanceOfSatisfying(TypeName.class, type ->
+                assertThat(type.getName()).isEqualTo("PricingOverrideScopeType"));
+
+        var scope = registry.getType(
+            "PricingOverrideScopeType", EnumTypeDefinition.class).orElseThrow();
+        assertThat(scope.getEnumValueDefinitions()).extracting(value -> value.getName())
+            .containsExactly("ALL", "BRANCH");
+        var component = registry.getType(
+            "PriceComponentType", EnumTypeDefinition.class).orElseThrow();
+        assertThat(component.getEnumValueDefinitions()).extracting(value -> value.getName())
+            .contains("MANUAL_OVERRIDE");
+    }
+
+    private graphql.language.FieldDefinition field(
+        ObjectTypeDefinition type,
+        String name
+    ) {
+        return type.getFieldDefinitions().stream()
+            .filter(field -> name.equals(field.getName()))
+            .findFirst()
+            .orElseThrow();
     }
 }

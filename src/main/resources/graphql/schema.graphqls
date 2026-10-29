@@ -9,6 +9,7 @@ type Query {
 
 type Mutation {
   createPropertyRateProfileVersion(input: CreatePropertyRateProfileVersionInput!): PropertyRateProfileVersion!
+  applyPropertyPriceOverride(input: ApplyPropertyPriceOverrideInput!): AppliedPropertyPriceOverride!
 }
 
 type Booking {
@@ -102,6 +103,52 @@ type PropertyPriceQuote {
   components: [PriceComponent!]!
 }
 
+type AppliedPropertyPriceOverride {
+  baseQuote: PropertyPriceQuote!
+  manualOverride: PricingManualOverride!
+  finalPrecedence: [String!]!
+  finalComponents: [PriceComponent!]!
+  finalLodgingAmount: String!
+  finalCommissionAmount: String!
+  finalTotalAmount: String!
+}
+
+type PricingManualOverride {
+  id: ID!
+  idempotencyKey: String!
+  requestHash: String!
+  propertyId: ID!
+  rateProfileVersionId: ID!
+  baseQuoteFingerprint: String!
+  calculationVersion: String!
+  beforeLodgingAmount: String!
+  targetLodgingAmount: String!
+  adjustmentAmount: String!
+  reductionBps: Int!
+  commissionBps: Int!
+  beforeCommissionAmount: String!
+  afterCommissionAmount: String!
+  beforeTotalAmount: String!
+  afterTotalAmount: String!
+  currency: String!
+  largeApprovalRequired: Boolean!
+  actorAdminAccountId: ID!
+  actorAdminProfileId: ID!
+  authorizationVersion: String!
+  overridePermissionCode: String!
+  overrideScopeType: PricingOverrideScopeType!
+  overridePartitionId: ID
+  largeApprovalAuthorizationVersion: String
+  largeApprovalPermissionCode: String
+  largeApprovalScopeType: PricingOverrideScopeType
+  largeApprovalPartitionId: ID
+  reason: String!
+  correlationId: String!
+  quoteTtlMinutes: Int!
+  createdAt: String!
+  expiresAt: String!
+}
+
 type PricingRuleEvaluation {
   order: Int!
   chargeDate: String
@@ -147,7 +194,13 @@ enum PriceComponentType {
   STAY_PRODUCT_RATE
   RULE_DISCOUNT
   RULE_SURCHARGE
+  MANUAL_OVERRIDE
   COMMISSION
+}
+
+enum PricingOverrideScopeType {
+  ALL
+  BRANCH
 }
 
 enum PricingChannel {
@@ -208,4 +261,13 @@ input CalculatePropertyPriceQuoteInput {
   channel: PricingChannel!
   staffCreated: Boolean! = false
   commissionBps: Int
+}
+
+input ApplyPropertyPriceOverrideInput {
+  idempotencyKey: String!
+  quote: CalculatePropertyPriceQuoteInput!
+  expectedBaseQuoteFingerprint: String!
+  targetLodgingAmount: String!
+  reason: String!
+  correlationId: String!
 }

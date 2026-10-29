@@ -12,9 +12,13 @@ public class PricingScopePolicy {
         this.properties = properties;
     }
 
-    public void require(AuthorizationClient.Snapshot snapshot, String permission, UUID propertyId) {
+    public ScopeEvidence require(
+        AuthorizationClient.Snapshot snapshot,
+        String permission,
+        UUID propertyId
+    ) {
         var scopes = snapshot.scopes(permission);
-        if (scopes.contains(Scope.ALL)) return;
+        if (scopes.contains(Scope.ALL)) return new ScopeEvidence("ALL", null);
         if (!scopes.contains(Scope.PARTITION)) {
             throw new PricingPolicyException("FORBIDDEN_PRICING_SCOPE",
                 "Pricing action requires ALL or an authorized BRANCH partition");
@@ -34,5 +38,8 @@ public class PricingScopePolicy {
             throw new PricingPolicyException("FORBIDDEN_PRICING_SCOPE",
                 "Property is outside the authorized branch partition");
         }
+        return new ScopeEvidence("BRANCH", resolution.branchId());
     }
+
+    public record ScopeEvidence(String type, UUID partitionId) {}
 }
