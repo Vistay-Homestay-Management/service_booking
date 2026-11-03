@@ -28,7 +28,8 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
                     "INVALID_STORED_PRICING_OVERRIDE",
                     "INVALID_STORED_PRICING_PUBLICATION",
                     "INVALID_STORED_PRICING_SNAPSHOT", "INVENTORY_OBSERVATION_FAILED",
-                    "IDEMPOTENCY_COMMAND_INCOMPLETE", "INVENTORY_BLOCK_COMMAND_FAILED" ->
+                    "IDEMPOTENCY_COMMAND_INCOMPLETE", "INVENTORY_BLOCK_COMMAND_FAILED",
+                    "INVENTORY_MANAGEMENT_UNAVAILABLE" ->
                     ErrorType.INTERNAL_ERROR;
                 default -> ErrorType.BAD_REQUEST;
             };

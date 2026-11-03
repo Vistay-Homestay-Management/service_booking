@@ -10,6 +10,7 @@ type Query {
   previewPublishedPropertyPriceQuote(input: PublishedPropertyPriceQuoteInput!): PublishedPropertyPriceQuotePreview!
   propertyPriceQuoteSnapshot(id: ID!): PropertyPriceQuoteSnapshot!
   propertyAvailability(input: PropertyAvailabilityInput!): PropertyAvailabilityObservation!
+  inventoryBlocks(input: InventoryBlockManagementInput!): InventoryBlockManagementPage!
 }
 
 type Mutation {
@@ -128,6 +129,44 @@ type InventoryBlockCommandResult {
   propertyMembershipVersion: String!
   occurredAt: String!
   releasedAt: String
+}
+
+input InventoryBlockManagementInput {
+  propertyId: ID!
+  fromDate: String
+  toDateExclusive: String
+  types: [InventoryBlockType!] = []
+  statuses: [InventoryBlockStatus!] = []
+  first: Int = 50
+  after: String
+}
+
+type InventoryBlockManagementPage {
+  nodes: [InventoryBlockManagementNode!]!
+  pageInfo: InventoryBlockPageInfo!
+  inventoryRevision: String!
+  branchId: ID!
+  propertyMembershipVersion: String!
+}
+
+type InventoryBlockManagementNode {
+  inventoryBlockId: ID!
+  propertyId: ID!
+  type: InventoryBlockType!
+  status: InventoryBlockStatus!
+  startDate: String!
+  endDateExclusive: String!
+  reason: String
+  channelProvider: String
+  blockVersion: String!
+  createdAt: String!
+  updatedAt: String!
+  releasedAt: String
+}
+
+type InventoryBlockPageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
 }
 
 type PropertyRateProfileVersion {

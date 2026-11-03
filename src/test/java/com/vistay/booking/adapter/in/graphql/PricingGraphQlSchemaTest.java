@@ -240,6 +240,38 @@ class PricingGraphQlSchemaTest {
             .containsExactly("CREATED", "RELEASED");
     }
 
+    @Test
+    void exposesSecuredInventoryBlockManagementPage() throws Exception {
+        var schema = new ClassPathResource("graphql/schema.graphqls")
+            .getContentAsString(StandardCharsets.UTF_8);
+        var registry = new SchemaParser().parse(schema);
+
+        var query = registry.getType("Query", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(field(query, "inventoryBlocks").getInputValueDefinitions())
+            .extracting(input -> input.getName()).containsExactly("input");
+        var input = registry.getType(
+            "InventoryBlockManagementInput", InputObjectTypeDefinition.class).orElseThrow();
+        assertThat(input.getInputValueDefinitions()).extracting(field -> field.getName())
+            .containsExactly("propertyId", "fromDate", "toDateExclusive", "types",
+                "statuses", "first", "after");
+        var page = registry.getType(
+            "InventoryBlockManagementPage", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(page.getFieldDefinitions()).extracting(field -> field.getName())
+            .containsExactly("nodes", "pageInfo", "inventoryRevision", "branchId",
+                "propertyMembershipVersion");
+        var node = registry.getType(
+            "InventoryBlockManagementNode", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(node.getFieldDefinitions()).extracting(field -> field.getName())
+            .containsExactly("inventoryBlockId", "propertyId", "type", "status",
+                "startDate", "endDateExclusive", "reason", "channelProvider",
+                "blockVersion", "createdAt", "updatedAt", "releasedAt")
+            .doesNotContain("bookingId", "channelExternalBlockId", "actorAccountId");
+        var pageInfo = registry.getType(
+            "InventoryBlockPageInfo", ObjectTypeDefinition.class).orElseThrow();
+        assertThat(pageInfo.getFieldDefinitions()).extracting(field -> field.getName())
+            .containsExactly("hasNextPage", "endCursor");
+    }
+
     private graphql.language.FieldDefinition field(
         ObjectTypeDefinition type,
         String name
