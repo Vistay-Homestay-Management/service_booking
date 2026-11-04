@@ -1,0 +1,51 @@
+package com.vistay.booking.adapter.in.graphql;
+
+import com.vistay.booking.application.PricingPolicyException;
+import graphql.GraphQLError;
+import graphql.GraphqlErrorBuilder;
+import graphql.GraphqlErrorException;
+import graphql.schema.DataFetchingEnvironment;
+import org.springframework.graphql.execution.DataFetcherExceptionResolverAdapter;
+import org.springframework.graphql.execution.ErrorType;
+import org.springframework.stereotype.Component;
+
+@Component
+public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapter {
+    @Override
+    protected GraphQLError resolveToSingleError(Throwable exception, DataFetchingEnvironment environment) {
+        if (exception instanceof PricingPolicyException error) {
+            var type = switch (error.code()) {
+                case "UNAUTHENTICATED", "INVALID_TOKEN" -> ErrorType.UNAUTHORIZED;
+                case "FORBIDDEN_PRICING_SCOPE", "INVENTORY_READ_FORBIDDEN",
+                    "INVENTORY_BLOCK_FORBIDDEN" ->
+                    ErrorType.FORBIDDEN;
+                case "PRICING_VERSION_NOT_FOUND", "PRICING_OVERRIDE_NOT_FOUND",
+                    "PRICING_PUBLICATION_NOT_FOUND", "PRICING_QUOTE_SNAPSHOT_NOT_FOUND",
+                    "PROPERTY_NOT_FOUND", "PROPERTY_PARTITION_UNMAPPED",
+                    "INVENTORY_BLOCK_NOT_FOUND" ->
+                    ErrorType.NOT_FOUND;
+                case "PROPERTY_PARTITION_UNAVAILABLE", "INVALID_STORED_PRICING_POLICY",
+                    "INVALID_STORED_PRICING_OVERRIDE",
+                    "INVALID_STORED_PRICING_PUBLICATION",
+                    "INVALID_STORED_PRICING_SNAPSHOT", "INVENTORY_OBSERVATION_FAILED",
+                    "IDEMPOTENCY_COMMAND_INCOMPLETE", "INVENTORY_BLOCK_COMMAND_FAILED",
+                    "INVENTORY_MANAGEMENT_UNAVAILABLE" ->
+                    ErrorType.INTERNAL_ERROR;
+                default -> ErrorType.BAD_REQUEST;
+            };
+            return GraphqlErrorBuilder.newError(environment)
+                .message(error.getMessage())
+                .errorType(type)
+                .extensions(java.util.Map.of("code", error.code()))
+                .build();
+        }
+        if (!(exception instanceof GraphqlErrorException error)) {
+            return null;
+        }
+        return GraphqlErrorBuilder.newError(environment)
+            .message(error.getMessage())
+            .errorType(error.getErrorType())
+            .extensions(error.getExtensions())
+            .build();
+    }
+}

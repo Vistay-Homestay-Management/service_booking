@@ -40,12 +40,55 @@ spring:
       ssl.truststore.password: ${KAFKA_TRUSTSTORE_PASSWORD:}
     producer:
       acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         enable.idempotence: true
     consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:vistay-booking}
       enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       properties:
         isolation.level: read_committed
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_BACKOFFICE_ISSUER:http://localhost:8180/realms/vistay-backoffice}
+          jwk-set-uri: ${KEYCLOAK_BACKOFFICE_JWKS_URI:http://localhost:8180/realms/vistay-backoffice/protocol/openid-connect/certs}
+  grpc:
+    server:
+      port: ${GRPC_SERVER_PORT:9090}
+      ssl:
+        enabled: ${GRPC_TLS_ENABLED:true}
+        bundle: ${GRPC_SSL_BUNDLE:grpc-booking-server}
+        client-auth: require
+    client:
+      channel:
+        user:
+          target: ${USER_GRPC_ADDRESS:static://localhost:9090}
+          ssl:
+            bundle: ${USER_GRPC_SSL_BUNDLE:grpc-user-client}
+        property:
+          target: ${PROPERTY_GRPC_ADDRESS:static://localhost:9092}
+          ssl:
+            bundle: ${PROPERTY_GRPC_SSL_BUNDLE:grpc-user-client}
+  ssl:
+    bundle:
+      pem:
+        grpc-user-client:
+          keystore:
+            certificate: ${GRPC_CLIENT_CERT:file:/run/secrets/grpc/booking.crt}
+            private-key: ${GRPC_CLIENT_KEY:file:/run/secrets/grpc/booking.key}
+          truststore:
+            certificate: ${GRPC_SERVER_CA_CERT:file:/run/secrets/grpc/ca.crt}
+        grpc-booking-server:
+          keystore:
+            certificate: ${BOOKING_GRPC_SERVER_CERT:file:/run/secrets/grpc/server/server.crt}
+            private-key: ${BOOKING_GRPC_SERVER_KEY:file:/run/secrets/grpc/server/server.key}
+          truststore:
+            certificate: ${BOOKING_GRPC_CLIENT_CA_CERT:file:/run/secrets/grpc/server/ca.crt}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -61,6 +104,27 @@ management:
       probes:
         enabled: true
       show-details: never
+
+vistay:
+  security:
+    audience: ${KEYCLOAK_BACKOFFICE_AUDIENCE:vistay-backoffice-api}
+  topics:
+    authorization-changed: ${AUTHORIZATION_CHANGED_TOPIC:vistay.user.authorization-changed.v1}
+    rate-profile-published: ${RATE_PROFILE_PUBLISHED_TOPIC:vistay.booking.rate-profile-published.v1}
+    inventory-block-changed: ${INVENTORY_BLOCK_CHANGED_TOPIC:vistay.booking.inventory-block-changed.v1}
+  outbox:
+    poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
+    send-timeout-seconds: ${OUTBOX_SEND_TIMEOUT_SECONDS:10}
+  authorization:
+    local-cache-ttl: ${AUTHORIZATION_LOCAL_CACHE_TTL:30s}
+    grpc-deadline: ${AUTHORIZATION_GRPC_DEADLINE:2s}
+  property:
+    partition-deadline: ${PROPERTY_PARTITION_DEADLINE:2s}
+  grpc:
+    allowed-caller-uris: ${GRPC_ALLOWED_CALLER_URIS:spiffe://vistay/service/payment,spiffe://vistay/service/finance,spiffe://vistay/service/property}
+    pricing-reconciliation-allowed-caller-uris: ${PRICING_RECONCILIATION_ALLOWED_CALLER_URIS:spiffe://vistay/service/finance}
+    inventory-reconciliation-allowed-caller-uris: ${INVENTORY_RECONCILIATION_ALLOWED_CALLER_URIS:spiffe://vistay/service/property}
+    maximum-deadline: ${GRPC_MAXIMUM_DEADLINE:2s}
 
 logging:
   structured:
