@@ -26,7 +26,7 @@ import org.springframework.stereotype.Controller;
 @Controller
 public class PricingLifecycleController {
     private static final String READ = "pricing:read";
-    private static final String APPROVE = "pricing:approve";
+    private static final String APPROVE = "pricing:publish";
 
     private final PricingPublicationService publications;
     private final PricingQuoteSnapshotService snapshots;
@@ -46,6 +46,7 @@ public class PricingLifecycleController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public PublicationPreview previewPropertyRateProfilePublication(
         @AuthenticationPrincipal Jwt jwt,
         @Argument UUID rateProfileVersionId
@@ -57,6 +58,7 @@ public class PricingLifecycleController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public Publication activePropertyRateProfileVersion(
         @AuthenticationPrincipal Jwt jwt,
         @Argument UUID propertyId,
@@ -75,6 +77,7 @@ public class PricingLifecycleController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public PublishedQuotePreview previewPublishedPropertyPriceQuote(
         @AuthenticationPrincipal Jwt jwt,
         @Argument PublishedPropertyPriceQuoteInput input
@@ -87,6 +90,7 @@ public class PricingLifecycleController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public QuoteSnapshot propertyPriceQuoteSnapshot(
         @AuthenticationPrincipal Jwt jwt,
         @Argument UUID id
@@ -99,6 +103,7 @@ public class PricingLifecycleController {
     }
 
     @MutationMapping
+    @RequiresPermission("pricing:publish")
     public Publication publishPropertyRateProfileVersion(
         @AuthenticationPrincipal Jwt jwt,
         @Argument PublishPropertyRateProfileVersionInput input
@@ -113,6 +118,7 @@ public class PricingLifecycleController {
     }
 
     @MutationMapping
+    @RequiresPermission("pricing:read")
     public QuoteSnapshot createPropertyPriceQuoteSnapshot(
         @AuthenticationPrincipal Jwt jwt,
         @Argument CreatePropertyPriceQuoteSnapshotInput input

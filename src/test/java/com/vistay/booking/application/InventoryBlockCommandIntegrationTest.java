@@ -72,7 +72,7 @@ class InventoryBlockCommandIntegrationTest {
             .load()
             .migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.targetSchemaVersion).isEqualTo("8");
+        assertThat(result.targetSchemaVersion).isEqualTo("8.3");
         jdbc = JdbcClient.create(dataSource);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         json = JsonMapper.builder().build();

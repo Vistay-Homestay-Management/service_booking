@@ -7,6 +7,7 @@ import org.springframework.stereotype.Controller;
 public class ServiceInfoQuery {
 
     @QueryMapping
+    @PublicResolver
     public ServiceInfo bookingServiceInfo() {
         return new ServiceInfo("booking", "0.1.0");
     }
@@ -14,4 +15,3 @@ public class ServiceInfoQuery {
     public record ServiceInfo(String name, String version) {
     }
 }
-
