@@ -43,6 +43,7 @@ public class PricingOverrideController {
     }
 
     @MutationMapping
+    @RequiresPermission("pricing:override")
     public AppliedOverride applyPropertyPriceOverride(
         @AuthenticationPrincipal Jwt jwt,
         @Argument ApplyPropertyPriceOverrideInput input

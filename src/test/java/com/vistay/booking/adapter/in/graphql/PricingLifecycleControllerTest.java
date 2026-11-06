@@ -58,9 +58,9 @@ class PricingLifecycleControllerTest {
     }
 
     @Test
-    void publicationRequiresApproveAndPassesImmutableAuthorizationEvidence() {
-        when(authorizations.require(ACCOUNT_ID, "pricing:approve"))
-            .thenReturn(snapshot("pricing:approve", Set.of(Scope.ALL)));
+    void publicationRequiresPublishAndPassesImmutableAuthorizationEvidence() {
+        when(authorizations.require(ACCOUNT_ID, "pricing:publish"))
+            .thenReturn(snapshot("pricing:publish", Set.of(Scope.ALL)));
         when(publications.preview(PROFILE_ID))
             .thenReturn(new PublicationPreview(profile(), FINGERPRINT, null, null));
         var input = new PublishPropertyRateProfileVersionInput(

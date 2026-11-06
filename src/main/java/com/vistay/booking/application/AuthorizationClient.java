@@ -31,8 +31,8 @@ public class AuthorizationClient {
     private final Duration deadline;
     private final Duration cacheTtl;
     private final ObjectMapper json;
-    private final Map<UUID, CachedSnapshot> cache = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> minimumVersions = new ConcurrentHashMap<>();
+    private final Map<CacheKey, CachedSnapshot> cache = new ConcurrentHashMap<>();
+    private final Map<CacheKey, Long> minimumVersions = new ConcurrentHashMap<>();
 
     public AuthorizationClient(
         GrpcChannelFactory channels,
@@ -47,11 +47,19 @@ public class AuthorizationClient {
     }
 
     public Snapshot require(UUID accountId, String permission) {
-        return require(accountId, permission, null);
+        return require("ADMIN", accountId, permission, null);
     }
 
     public Snapshot require(UUID accountId, String permission, String forbiddenCode) {
-        return enforce(get(accountId), permission, forbiddenCode);
+        return require("ADMIN", accountId, permission, forbiddenCode);
+    }
+
+    public Snapshot require(String accountType, UUID accountId, String permission) {
+        return require(accountType, accountId, permission, null);
+    }
+
+    public Snapshot require(String accountType, UUID accountId, String permission, String forbiddenCode) {
+        return enforce(get(accountType, accountId), permission, forbiddenCode);
     }
 
     static Snapshot enforce(Snapshot snapshot, String permission, String forbiddenCode) {
@@ -77,9 +85,15 @@ public class AuthorizationClient {
     }
 
     public Snapshot get(UUID accountId) {
+        return get("ADMIN", accountId);
+    }
+
+    public Snapshot get(String accountType, UUID accountId) {
+        var normalizedType = normalizeAccountType(accountType);
+        var key = new CacheKey(normalizedType, accountId);
         var now = Instant.now();
-        var minimumVersion = minimumVersions.getOrDefault(accountId, 0L);
-        var cached = cache.get(accountId);
+        var minimumVersion = minimumVersions.getOrDefault(key, 0L);
+        var cached = cache.get(key);
         if (cached != null && cached.expiresAt().isAfter(now)
             && cached.snapshot().authorizationVersion() >= minimumVersion) {
             return cached.snapshot();
@@ -88,11 +102,11 @@ public class AuthorizationClient {
             var response = stub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)
                 .getAuthorizationSnapshot(GetAuthorizationSnapshotRequest.newBuilder()
                     .setAccount(AccountRef.newBuilder().setAccountId(accountId.toString())
-                        .setAccountType(AccountType.ACCOUNT_TYPE_ADMIN).build())
+                        .setAccountType(AccountType.valueOf("ACCOUNT_TYPE_" + normalizedType)).build())
                     .setMinimumAuthorizationVersion(minimumVersion)
                     .build());
             var snapshot = decode(response);
-            cache.put(accountId, new CachedSnapshot(snapshot, now.plus(cacheTtl)));
+            cache.put(key, new CachedSnapshot(snapshot, now.plus(cacheTtl)));
             return snapshot;
         } catch (StatusRuntimeException unavailable) {
             throw error("AUTHORIZATION_UNAVAILABLE", "Authorization service is unavailable");
@@ -174,10 +188,20 @@ public class AuthorizationClient {
     )
     public void authorizationChanged(String rawEnvelope) {
         JsonNode data = json.readTree(rawEnvelope).get("data");
-        if (data == null || !"ADMIN".equals(data.get("accountType").asString())) return;
+        if (data == null) return;
+        var accountType = normalizeAccountType(data.get("accountType").asString());
         var accountId = UUID.fromString(data.get("accountId").asString());
-        minimumVersions.merge(accountId, data.get("authorizationVersion").asLong(), Math::max);
-        cache.remove(accountId);
+        var key = new CacheKey(accountType, accountId);
+        minimumVersions.merge(key, data.get("authorizationVersion").asLong(), Math::max);
+        cache.remove(key);
+    }
+
+    private static String normalizeAccountType(String value) {
+        var normalized = value == null ? "" : value.trim().toUpperCase();
+        if (!Set.of("ADMIN", "CUSTOMER", "HOST").contains(normalized)) {
+            throw error("INVALID_TOKEN", "Token account type is invalid");
+        }
+        return normalized;
     }
 
     private static GraphqlErrorException error(String code, String message) {
@@ -207,4 +231,5 @@ public class AuthorizationClient {
         }
     }
     private record CachedSnapshot(Snapshot snapshot, Instant expiresAt) {}
+    private record CacheKey(String accountType, UUID accountId) {}
 }

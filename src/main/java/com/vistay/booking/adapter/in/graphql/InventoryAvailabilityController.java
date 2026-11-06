@@ -33,6 +33,7 @@ public class InventoryAvailabilityController {
     }
 
     @QueryMapping
+    @RequiresPermission("inventory:read")
     public Availability propertyAvailability(
         @AuthenticationPrincipal Jwt jwt,
         @Argument PropertyAvailabilityInput input
