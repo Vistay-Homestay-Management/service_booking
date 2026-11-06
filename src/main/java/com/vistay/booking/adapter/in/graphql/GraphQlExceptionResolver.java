@@ -17,7 +17,7 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
             var type = switch (error.code()) {
                 case "UNAUTHENTICATED", "INVALID_TOKEN" -> ErrorType.UNAUTHORIZED;
                 case "FORBIDDEN_PRICING_SCOPE", "INVENTORY_READ_FORBIDDEN",
-                    "INVENTORY_BLOCK_FORBIDDEN" ->
+                    "INVENTORY_BLOCK_FORBIDDEN", "FORBIDDEN_BOOKING_POLICY_SCOPE" ->
                     ErrorType.FORBIDDEN;
                 case "PRICING_VERSION_NOT_FOUND", "PRICING_OVERRIDE_NOT_FOUND",
                     "PRICING_PUBLICATION_NOT_FOUND", "PRICING_QUOTE_SNAPSHOT_NOT_FOUND",

@@ -1,6 +1,8 @@
 spring:
   application:
     name: vistay-booking-service
+  profiles:
+    default: local
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:vistay_booking_db}
     username: ${DB_USERNAME:vistay}
@@ -9,6 +11,12 @@ spring:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:4}
       minimum-idle: ${DB_POOL_MIN_IDLE:0}
       schema: app
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:1s}
   jpa:
     open-in-view: false
     hibernate:
@@ -117,6 +125,7 @@ vistay:
     send-timeout-seconds: ${OUTBOX_SEND_TIMEOUT_SECONDS:10}
   authorization:
     local-cache-ttl: ${AUTHORIZATION_LOCAL_CACHE_TTL:30s}
+    role-policy-schema-version: ${AUTHORIZATION_ROLE_POLICY_SCHEMA_VERSION:2}
     grpc-deadline: ${AUTHORIZATION_GRPC_DEADLINE:2s}
   property:
     partition-deadline: ${PROPERTY_PARTITION_DEADLINE:2s}

@@ -35,6 +35,7 @@ public class InventoryBlockManagementController {
     }
 
     @QueryMapping
+    @RequiresPermission("inventory:read")
     public InventoryBlockManagementPage inventoryBlocks(
         @AuthenticationPrincipal Jwt jwt,
         @Argument InventoryBlockManagementInput input

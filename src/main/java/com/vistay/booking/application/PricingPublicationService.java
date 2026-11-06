@@ -31,7 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class PricingPublicationService {
     private static final String COMMAND_TYPE = "PUBLISH_PROPERTY_RATE_PROFILE_VERSION";
-    private static final String PERMISSION = "pricing:approve";
+    private static final String PERMISSION = "pricing:publish";
     private static final String SNAPSHOT_SCHEMA_VERSION = "PRICING_PUBLICATION_V1";
     private static final Pattern IDEMPOTENCY_KEY =
         Pattern.compile("^[A-Za-z0-9._:-]{8,160}$");

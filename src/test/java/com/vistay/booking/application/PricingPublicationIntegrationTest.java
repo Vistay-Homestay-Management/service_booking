@@ -84,7 +84,7 @@ class PricingPublicationIntegrationTest {
             .load()
             .migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.targetSchemaVersion).isEqualTo("8");
+        assertThat(result.targetSchemaVersion).isEqualTo("8.3");
         jdbc = JdbcClient.create(dataSource);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         json = JsonMapper.builder().build();
@@ -130,7 +130,7 @@ class PricingPublicationIntegrationTest {
         assertThat(first.snapshotSchemaVersion()).isEqualTo("PRICING_PUBLICATION_V1");
         assertThat(first.publicationRevision()).isEqualTo(1);
         assertThat(first.previousPublicationId()).isNull();
-        assertThat(first.permissionCode()).isEqualTo("pricing:approve");
+        assertThat(first.permissionCode()).isEqualTo("pricing:publish");
         assertThat(first.scopeType()).isEqualTo("ALL");
         assertThat(publications.preview(profile.id()).published()).isTrue();
         assertThat(count("pricing_profile_publications")).isEqualTo(1);

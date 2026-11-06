@@ -1,7 +1,11 @@
 type Query {
   bookingServiceInfo: BookingServiceInfo!
   booking(id: ID!): Booking!
-  bookings(status: String, limit: Int = 50): [Booking!]!
+  bookings(status: String, limit: Int = 50): [Booking!]! @deprecated(reason: "Use a scope-specific cursor connection")
+  myBookings(status: String, first: Int = 50, after: String): BookingConnection!
+  assignedBookings(status: String, first: Int = 50, after: String): BookingConnection!
+  branchBookings(branchId: ID!, status: String, first: Int = 50, after: String): BookingConnection!
+  ownedPropertyBookings(status: String, first: Int = 50, after: String): BookingConnection!
   propertyRateProfileVersion(id: ID!): PropertyRateProfileVersion!
   propertyRateProfileVersions(propertyId: ID!): [PropertyRateProfileVersion!]!
   calculatePropertyPriceQuote(input: CalculatePropertyPriceQuoteInput!): PropertyPriceQuote!
@@ -11,6 +15,51 @@ type Query {
   propertyPriceQuoteSnapshot(id: ID!): PropertyPriceQuoteSnapshot!
   propertyAvailability(input: PropertyAvailabilityInput!): PropertyAvailabilityObservation!
   inventoryBlocks(input: InventoryBlockManagementInput!): InventoryBlockManagementPage!
+  bookingPolicyCatalog(includeDrafts: Boolean! = false): [BookingPolicy!]!
+  bookingPolicyChangeRequests(status: String): [BookingPolicyChangeRequest!]!
+  operationsAnalytics(input: AnalyticsRangeInput!): OperationsAnalytics!
+}
+
+input AnalyticsRangeInput {
+  from: String!
+  to: String!
+}
+
+type OperationsAnalytics {
+  from: String!
+  to: String!
+  generatedAt: String!
+  totalBookings: Int!
+  confirmedBookings: Int!
+  cancelledBookings: Int!
+  guests: Int!
+  activeProperties: Int!
+  occupiedNights: Int!
+  occupancyRate: String!
+  cancellationRate: String!
+  money: [AnalyticsMoney!]!
+  series: [AnalyticsSeriesPoint!]!
+  channels: [AnalyticsBreakdown!]!
+  statuses: [AnalyticsBreakdown!]!
+}
+
+type AnalyticsMoney {
+  currency: String!
+  revenue: String!
+  averageBookingValue: String!
+}
+
+type AnalyticsSeriesPoint {
+  day: String!
+  bookings: Int!
+  revenue: String!
+  guests: Int!
+}
+
+type AnalyticsBreakdown {
+  code: String!
+  bookings: Int!
+  revenue: String!
 }
 
 type Mutation {
@@ -20,6 +69,133 @@ type Mutation {
   createPropertyPriceQuoteSnapshot(input: CreatePropertyPriceQuoteSnapshotInput!): PropertyPriceQuoteSnapshot!
   createInventoryBlock(input: CreateInventoryBlockInput!): InventoryBlockCommandResult!
   releaseInventoryBlock(input: ReleaseInventoryBlockInput!): InventoryBlockCommandResult!
+  requestBookingPolicyChange(input: BookingPolicyChangeInput!): BookingPolicyChangeRequest!
+  approveBookingPolicyChange(id: ID!, reason: String!): BookingPolicyChangeRequest!
+  rejectBookingPolicyChange(id: ID!, reason: String!): BookingPolicyChangeRequest!
+  simulateBookingPolicy(input: BookingPolicySimulationInput!): BookingPolicySimulation!
+}
+
+type BookingPolicy {
+  id: ID!
+  code: String!
+  name: String!
+  policyType: String!
+  active: Boolean!
+  rowVersion: String!
+  versionId: ID!
+  version: Int!
+  status: String!
+  effectiveFrom: String!
+  effectiveTo: String
+  holdMinutes: Int!
+  minimumNoticeHours: Int!
+  maximumAdvanceDays: Int!
+  minimumStayNights: Int!
+  maximumStayNights: Int
+  minimumGuestAge: Int!
+  securityDepositAmount: String!
+  currency: String!
+  allowedStayTypesJson: String!
+  allowedChannelsJson: String!
+  cancellationRulesJson: String!
+  guestRulesJson: String!
+  fingerprint: String!
+  createdByAccountId: ID!
+  approvedByAccountId: ID
+  reason: String!
+}
+
+type BookingPolicyChangeRequest {
+  id: ID!
+  policyId: ID!
+  policyCode: String!
+  policyVersionId: ID!
+  status: String!
+  expectedPolicyVersion: String!
+  requestedByAccountId: ID!
+  decidedByAccountId: ID
+  reason: String!
+  decisionReason: String
+  requestedAt: String!
+  decidedAt: String
+}
+
+type BookingPolicySimulation {
+  id: ID!
+  allowed: Boolean!
+  reasons: [String!]!
+  policy: ResolvedBookingPolicy!
+}
+
+type ResolvedBookingPolicy {
+  policyId: ID!
+  code: String!
+  versionId: ID!
+  version: Int!
+  bindingId: ID!
+  scopeType: String!
+  scopeId: ID
+  holdMinutes: Int!
+  minimumNoticeHours: Int!
+  maximumAdvanceDays: Int!
+  minimumStayNights: Int!
+  maximumStayNights: Int
+  fingerprint: String!
+}
+
+input BookingPolicyChangeInput {
+  code: String!
+  name: String!
+  policyType: String!
+  effectiveFrom: String!
+  effectiveTo: String
+  holdMinutes: Int!
+  minimumNoticeHours: Int!
+  maximumAdvanceDays: Int!
+  minimumStayNights: Int!
+  maximumStayNights: Int
+  minimumGuestAge: Int! = 18
+  securityDepositAmount: String! = "0"
+  currency: String! = "VND"
+  allowedStayTypes: [String!]! = []
+  allowedChannels: [String!]! = []
+  cancellationRules: BookingCancellationRulesInput
+  guestRules: BookingGuestRulesInput
+  bindings: [BookingPolicyBindingInput!]!
+  expectedPolicyVersion: String!
+  reason: String!
+  idempotencyKey: String!
+}
+
+input BookingCancellationRulesInput {
+  refundableUntilHours: Int
+  lateCancellationChargePercent: Int
+  noShowChargePercent: Int
+}
+
+input BookingGuestRulesInput {
+  petsAllowed: Boolean
+  smokingAllowed: Boolean
+  partiesAllowed: Boolean
+  quietHoursStart: String
+  quietHoursEnd: String
+}
+
+input BookingPolicyBindingInput {
+  scopeType: String!
+  scopeId: ID
+  priority: Int = 0
+}
+
+input BookingPolicySimulationInput {
+  policyType: String!
+  organizationId: ID
+  branchId: ID
+  propertyId: ID
+  at: String!
+  stayNights: Int!
+  noticeHours: Int!
+  advanceDays: Int!
 }
 
 type Booking {
@@ -31,6 +207,16 @@ type Booking {
   checkOutDate: String!
   totalAmount: String
   currency: String!
+}
+
+type BookingConnection {
+  nodes: [Booking!]!
+  pageInfo: BookingPageInfo!
+}
+
+type BookingPageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
 }
 
 type BookingServiceInfo {

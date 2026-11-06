@@ -42,6 +42,7 @@ public class PricingController {
     }
 
     @MutationMapping
+    @RequiresPermission("pricing:update")
     public ProfileVersion createPropertyRateProfileVersion(
         @AuthenticationPrincipal Jwt jwt,
         @Argument CreatePropertyRateProfileVersionInput input
@@ -54,6 +55,7 @@ public class PricingController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public ProfileVersion propertyRateProfileVersion(
         @AuthenticationPrincipal Jwt jwt,
         @Argument UUID id
@@ -66,6 +68,7 @@ public class PricingController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public List<ProfileVersion> propertyRateProfileVersions(
         @AuthenticationPrincipal Jwt jwt,
         @Argument UUID propertyId
@@ -77,6 +80,7 @@ public class PricingController {
     }
 
     @QueryMapping
+    @RequiresPermission("pricing:read")
     public Quote calculatePropertyPriceQuote(
         @AuthenticationPrincipal Jwt jwt,
         @Argument CalculatePropertyPriceQuoteInput input

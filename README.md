@@ -4,6 +4,20 @@ Booking lifecycle, inventory, guests, and booking snapshots.
 
 This repository is part of the ViStay Homestay Management platform. Epic 1 establishes a buildable, testable application shell and platform integrations; domain workflows are delivered by their owning epics.
 
+## Run from IntelliJ against the local Compose database
+
+Start the infrastructure stack first (including PostgreSQL and Kafka), then run
+`BookingApplication` from this repository in IntelliJ with its working directory
+set to `service_booking`. The default `local` profile loads credentials from the
+untracked `../platform_infrastructure/.env` and connects to the Compose PostgreSQL
+port `127.0.0.1:55432`, not a separate PostgreSQL installation on port 5432.
+The local profile also uses the generated gRPC/Kafka certificates in
+`../platform_infrastructure/certs/generated`; generate those through the
+infrastructure instructions if they are missing. To use a different database,
+override `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME` and `DB_PASSWORD` in the
+IntelliJ run configuration. Docker Compose sets the `docker` profile explicitly;
+the image continues to connect to `postgres:5432` with Compose credentials.
+
 ## Pricing API
 
 The GraphQL endpoint exposes immutable, effective-dated pricing authoring and calculation operations:

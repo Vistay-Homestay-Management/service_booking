@@ -1,0 +1,39 @@
+# IntelliJ runs from the service_booking directory. Compose's untracked .env
+# supplies the same database/Kafka credentials used by the local containers.
+spring:
+  config:
+    import: optional:file:../platform_infrastructure/.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:55432}/${DB_NAME:vistay_booking_db}
+    username: ${DB_USERNAME:${POSTGRES_USER:vistay}}
+    password: ${DB_PASSWORD:${POSTGRES_PASSWORD:}}
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_EXTERNAL_PORT:9093}
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: SCRAM-SHA-512
+      sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required username="vistay-booking" password="${KAFKA_BOOKING_PASSWORD}";
+      ssl.truststore.location: ../platform_infrastructure/certs/generated/kafka/client/kafka.truststore.jks
+      ssl.truststore.password: ${KAFKA_STORE_PASSWORD}
+  grpc:
+    client:
+      channel:
+        user:
+          target: static://localhost:9090
+        property:
+          target: static://localhost:9092
+  ssl:
+    bundle:
+      pem:
+        grpc-user-client:
+          keystore:
+            certificate: file:../platform_infrastructure/certs/generated/grpc/booking-client/booking.crt
+            private-key: file:../platform_infrastructure/certs/generated/grpc/booking-client/booking.key
+          truststore:
+            certificate: file:../platform_infrastructure/certs/generated/grpc/booking-client/ca.crt
+        grpc-booking-server:
+          keystore:
+            certificate: file:../platform_infrastructure/certs/generated/grpc/booking-server/server.crt
+            private-key: file:../platform_infrastructure/certs/generated/grpc/booking-server/server.key
+          truststore:
+            certificate: file:../platform_infrastructure/certs/generated/grpc/booking-server/ca.crt

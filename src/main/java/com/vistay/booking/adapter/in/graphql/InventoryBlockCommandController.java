@@ -37,6 +37,7 @@ public class InventoryBlockCommandController {
     }
 
     @MutationMapping
+    @RequiresPermission("inventory:block")
     public CommandResult createInventoryBlock(
         @AuthenticationPrincipal Jwt jwt,
         @Argument CreateInventoryBlockInput input
@@ -50,6 +51,7 @@ public class InventoryBlockCommandController {
     }
 
     @MutationMapping
+    @RequiresPermission("inventory:block")
     public CommandResult releaseInventoryBlock(
         @AuthenticationPrincipal Jwt jwt,
         @Argument ReleaseInventoryBlockInput input
