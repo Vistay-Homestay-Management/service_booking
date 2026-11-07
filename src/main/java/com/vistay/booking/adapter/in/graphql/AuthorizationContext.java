@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
@@ -37,6 +38,7 @@ public class AuthorizationContext {
     private final int schemaVersion;
     private Map<String, Policy> policies;
 
+    @Autowired
     public AuthorizationContext(
         StringRedisTemplate redis,
         GrpcChannelFactory channels,
