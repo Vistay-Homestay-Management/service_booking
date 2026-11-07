@@ -9,15 +9,27 @@ import static org.mockito.Mockito.when;
 import com.vistay.contracts.user.v1.UserAuthorizationServiceGrpc;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.oauth2.jwt.Jwt;
 import tools.jackson.databind.ObjectMapper;
 
 class AuthorizationContextTest {
+    @Test
+    void declaresTheRuntimeConstructorForSpringInjection() {
+        var injectable = Arrays.stream(AuthorizationContext.class.getDeclaredConstructors())
+            .filter(constructor -> constructor.isAnnotationPresent(Autowired.class))
+            .toList();
+
+        assertThat(injectable).hasSize(1);
+        assertThat(injectable.getFirst().getParameterCount()).isEqualTo(6);
+    }
+
     @Test
     void performsOneRoleBatchForAliasesAndMultipleRootFields() {
         var redis = mock(StringRedisTemplate.class);
