@@ -8,6 +8,8 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.graphql.execution.ErrorType;
@@ -99,6 +101,86 @@ public class OperationsAnalyticsController {
             cancellation.toPlainString(), money, series, channels, statuses);
     }
 
+    @QueryMapping
+    @RequiresPermission(ANALYTICS_READ)
+    public OverviewAnalytics overviewAnalytics(@AuthenticationPrincipal Jwt jwt,
+        @Argument OverviewView view, @Argument AnalyticsRangeInput input) {
+        var scopes = authorization.require(jwt, ANALYTICS_READ);
+        if (view == OverviewView.SYSTEM && !scopes.contains("ALL")) {
+            throw error("FORBIDDEN_ANALYTICS_SCOPE", "System overview requires ALL scope");
+        }
+        if (view == OverviewView.PERSONAL && !scopes.containsAll(Set.of("ASSIGNED"))
+            && !scopes.contains("ALL")) {
+            throw error("FORBIDDEN_ANALYTICS_SCOPE", "Personal overview requires ASSIGNED scope");
+        }
+        var range = validate(input);
+        var profileId = profileId(jwt);
+        var personal = view == OverviewView.PERSONAL;
+        var predicate = personal ? """
+            AND (b.assigned_admin_user_id = :profileId OR EXISTS (
+              SELECT 1 FROM booking_attributions ba
+              WHERE ba.booking_id = b.id AND ba.admin_user_id = :profileId
+                AND ba.valid_from <= now()
+                AND (ba.valid_until IS NULL OR ba.valid_until > now())
+            ))
+            """ : "";
+        var summary = jdbc.sql("""
+            SELECT COUNT(*) AS total_bookings,
+              COUNT(*) FILTER (WHERE b.status IN ('CONFIRMED','CHECKED_IN','COMPLETED')) AS confirmed_bookings,
+              COUNT(*) FILTER (WHERE b.status = 'CANCELLED') AS cancelled_bookings,
+              COALESCE(SUM(b.adults + b.children), 0) AS guests,
+              COUNT(DISTINCT b.property_id) AS booked_properties,
+              COALESCE(SUM(GREATEST(0, LEAST(b.check_out_date, :toDate) - GREATEST(b.check_in_date, :fromDate)))
+                FILTER (WHERE b.status IN ('CONFIRMED','CHECKED_IN','COMPLETED')), 0) AS occupied_nights
+            FROM bookings b
+            WHERE b.created_at >= :fromAt AND b.created_at < :toAt
+            """ + predicate).param("fromDate", range.from()).param("toDate", range.to())
+            .param("fromAt", range.fromAt()).param("toAt", range.toAt())
+            .param("profileId", profileId).query(OverviewSummaryRow.class).single();
+        var today = LocalDate.now(ZoneOffset.UTC);
+        var stayToday = jdbc.sql("""
+            SELECT
+              COUNT(*) FILTER (WHERE b.check_in_date = :today AND b.status = 'CONFIRMED') AS expected_check_ins,
+              COUNT(*) FILTER (WHERE b.check_out_date = :today AND b.status = 'CHECKED_IN') AS expected_check_outs,
+              COUNT(*) FILTER (WHERE b.check_in_date <= :today AND b.check_out_date > :today
+                AND b.status = 'CHECKED_IN') AS in_house,
+              COUNT(*) FILTER (WHERE b.status = 'PENDING_CONFIRMATION') AS pending_confirmation,
+              COUNT(*) FILTER (WHERE b.status = 'CANCELLED' AND b.cancelled_at >= :todayAt
+                AND b.cancelled_at < :tomorrowAt) AS cancelled_today,
+              COUNT(DISTINCT b.property_id) FILTER (WHERE b.check_in_date <= :today
+                AND b.check_out_date > :today AND b.status IN ('CONFIRMED','CHECKED_IN')) AS occupied_properties
+            FROM bookings b WHERE 1 = 1
+            """ + predicate).param("today", today)
+            .param("todayAt", today.atStartOfDay().atOffset(ZoneOffset.UTC))
+            .param("tomorrowAt", today.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC))
+            .param("profileId", profileId).query(OverviewStayToday.class).single();
+        var money = jdbc.sql("""
+            SELECT b.currency,
+              COALESCE(SUM(b.total_amount) FILTER (WHERE b.status NOT IN ('CANCELLED','EXPIRED')), 0) AS revenue,
+              COALESCE(AVG(b.total_amount) FILTER (WHERE b.status NOT IN ('CANCELLED','EXPIRED')), 0) AS average_booking_value
+            FROM bookings b WHERE b.created_at >= :fromAt AND b.created_at < :toAt
+            """ + predicate + " GROUP BY b.currency ORDER BY b.currency")
+            .param("fromAt", range.fromAt()).param("toAt", range.toAt())
+            .param("profileId", profileId).query(MoneyRow.class).list();
+        var days = Math.max(1, ChronoUnit.DAYS.between(range.from(), range.to()));
+        var capacity = (long) summary.bookedProperties() * days;
+        var occupancy = capacity == 0 ? BigDecimal.ZERO : BigDecimal.valueOf(summary.occupiedNights())
+            .multiply(BigDecimal.valueOf(100)).divide(BigDecimal.valueOf(capacity), 2,
+                java.math.RoundingMode.HALF_UP);
+        return new OverviewAnalytics(view, range.from().toString(), range.to().toString(),
+            OffsetDateTime.now(ZoneOffset.UTC).toString(), summary.totalBookings(),
+            summary.confirmedBookings(), summary.cancelledBookings(), summary.guests(),
+            summary.bookedProperties(), summary.occupiedNights(), occupancy.toPlainString(), stayToday, money);
+    }
+
+    private static UUID profileId(Jwt jwt) {
+        try {
+            return UUID.fromString(jwt.getClaimAsString("profile_id"));
+        } catch (RuntimeException invalid) {
+            throw error("INVALID_TOKEN", "JWT profile_id is required");
+        }
+    }
+
     private static Range validate(AnalyticsRangeInput input) {
         if (input == null) throw error("INVALID_ANALYTICS_RANGE", "Analytics range is required");
         try {
@@ -128,6 +210,15 @@ public class OperationsAnalyticsController {
     public record MoneyRow(String currency, BigDecimal revenue, BigDecimal averageBookingValue) {}
     public record SeriesRow(LocalDate day, long bookings, BigDecimal revenue, long guests) {}
     public record BreakdownRow(String code, long bookings, BigDecimal revenue) {}
+    public enum OverviewView { SYSTEM, PERSONAL }
+    public record OverviewAnalytics(OverviewView view, String from, String to, String generatedAt,
+        long totalBookings, long confirmedBookings, long cancelledBookings, long guests,
+        long bookedProperties, long occupiedNights, String occupancyRate,
+        OverviewStayToday today, List<MoneyRow> money) {}
+    public record OverviewStayToday(long expectedCheckIns, long expectedCheckOuts, long inHouse,
+        long pendingConfirmation, long cancelledToday, long occupiedProperties) {}
+    private record OverviewSummaryRow(long totalBookings, long confirmedBookings,
+        long cancelledBookings, long guests, long bookedProperties, long occupiedNights) {}
     private record SummaryRow(long totalBookings, long confirmedBookings, long cancelledBookings,
         long guests, long activeProperties, long occupiedNights) {}
     private record Range(LocalDate from, LocalDate to, OffsetDateTime fromAt, OffsetDateTime toAt) {}

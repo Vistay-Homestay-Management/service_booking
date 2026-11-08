@@ -16,4 +16,15 @@ class OperationsAnalyticsContractTest {
             "FORBIDDEN_ANALYTICS_SCOPE", "status NOT IN ('CANCELLED','EXPIRED')");
         assertThat(schema).contains("operationsAnalytics", "AnalyticsMoney", "AnalyticsSeriesPoint");
     }
+
+    @Test
+    void overviewIsPermissionPinnedAndPersonalViewIsActorBound() throws Exception {
+        var source = Files.readString(Path.of(
+            "src/main/java/com/vistay/booking/adapter/in/graphql/OperationsAnalyticsController.java"));
+        var schema = Files.readString(Path.of("src/main/resources/graphql/schema.graphqls"));
+        assertThat(source).contains("@RequiresPermission(ANALYTICS_READ)",
+            "System overview requires ALL scope", "b.assigned_admin_user_id = :profileId",
+            "booking_attributions ba", "JWT profile_id is required");
+        assertThat(schema).contains("overviewAnalytics", "enum OverviewView", "OverviewStayToday");
+    }
 }
