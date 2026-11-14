@@ -17,7 +17,38 @@ type Query {
   inventoryBlocks(input: InventoryBlockManagementInput!): InventoryBlockManagementPage!
   bookingPolicyCatalog(includeDrafts: Boolean! = false): [BookingPolicy!]!
   bookingPolicyChangeRequests(status: String): [BookingPolicyChangeRequest!]!
-  operationsAnalytics(input: AnalyticsRangeInput!): OperationsAnalytics!
+    operationsAnalytics(input: AnalyticsRangeInput!): OperationsAnalytics!
+    overviewAnalytics(view: OverviewView!, input: AnalyticsRangeInput!): OverviewAnalytics!
+}
+
+enum OverviewView {
+    SYSTEM
+    PERSONAL
+}
+
+type OverviewAnalytics {
+    view: OverviewView!
+    from: String!
+    to: String!
+    generatedAt: String!
+    totalBookings: Int!
+    confirmedBookings: Int!
+    cancelledBookings: Int!
+    guests: Int!
+    bookedProperties: Int!
+    occupiedNights: Int!
+    occupancyRate: String!
+    today: OverviewStayToday!
+    money: [AnalyticsMoney!]!
+}
+
+type OverviewStayToday {
+    expectedCheckIns: Int!
+    expectedCheckOuts: Int!
+    inHouse: Int!
+    pendingConfirmation: Int!
+    cancelledToday: Int!
+    occupiedProperties: Int!
 }
 
 input AnalyticsRangeInput {
