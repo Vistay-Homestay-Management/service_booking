@@ -6,6 +6,7 @@ import graphql.GraphqlErrorException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,10 @@ public class BookingQuery {
         var branchIds = partitionIds(snapshot, BOOKING_READ, "BRANCH");
         var sensitiveBranchIds = partitionIds(snapshot, SENSITIVE_READ, "BRANCH");
         return jdbc.sql("""
-                SELECT b.id, b.booking_code, b.property_id, b.status, b.check_in_date, b.check_out_date,
+                SELECT b.id, b.booking_code, b.property_id, b.customer_id, b.guest_name, b.guest_phone, b.guest_email,
+                       b.property_snapshot ->> 'propertyName' AS property_name,
+                       NULLIF(b.property_snapshot ->> 'branchId', '')::uuid AS branch_id,
+                       b.status, b.check_in_date, b.check_out_date,
                        CASE WHEN :sensitiveAll
                            OR (:sensitiveSelf AND b.customer_id = :profileId)
                            OR (:sensitiveOwn AND b.property_snapshot ->> 'hostProfileId' = :profileIdText)
@@ -65,7 +69,7 @@ public class BookingQuery {
                            ))
                            OR (:sensitivePartition AND b.property_snapshot ->> 'branchId' IN (:sensitiveBranchIds))
                            THEN b.total_amount ELSE NULL END AS total_amount,
-                       b.currency, b.created_at
+                       b.currency, b.created_at, b.version
                 FROM bookings b
                 WHERE b.id = :id AND (
                     :allScope
@@ -114,6 +118,108 @@ public class BookingQuery {
         @Argument Integer limit
     ) {
         return list(jwt, status, limit, null, Mode.ALL, null).nodes();
+    }
+
+    @QueryMapping
+    @RequiresPermission(BOOKING_READ)
+    public BookingTimeline bookingTimeline(
+        @AuthenticationPrincipal Jwt jwt,
+        @Argument BookingTimelineInput input
+    ) {
+        if (input == null || input.fromDate() == null || input.toDateExclusive() == null) {
+            throw error("INVALID_TIMELINE_RANGE", "Timeline range is required");
+        }
+        final LocalDate fromDate;
+        final LocalDate toDateExclusive;
+        try {
+            fromDate = LocalDate.parse(input.fromDate());
+            toDateExclusive = LocalDate.parse(input.toDateExclusive());
+        } catch (RuntimeException invalidDate) {
+            throw error("INVALID_TIMELINE_RANGE", "Timeline dates must use ISO-8601 format");
+        }
+        var rangeDays = ChronoUnit.DAYS.between(fromDate, toDateExclusive);
+        if (rangeDays < 1 || rangeDays > 370) {
+            throw error("INVALID_TIMELINE_RANGE", "Timeline range must contain between 1 and 370 days");
+        }
+        var propertyIds = input.propertyIds() == null ? List.<UUID>of() : input.propertyIds().stream().distinct().toList();
+        if (propertyIds.size() > 500) {
+            throw error("TIMELINE_PROPERTY_LIMIT_EXCEEDED", "Timeline accepts at most 500 properties per batch");
+        }
+        if (propertyIds.isEmpty()) {
+            return new BookingTimeline(List.of(), fromDate.toString(), toDateExclusive.toString(), false);
+        }
+
+        var actor = actor(jwt);
+        var snapshot = subjectSnapshot(actor);
+        var scopes = policyScopes(authorizationContext.require(jwt, BOOKING_READ));
+        var sensitive = policyScopes(authorizationContext.scopes(jwt, SENSITIVE_READ));
+        var branchIds = partitionIds(snapshot, BOOKING_READ, "BRANCH");
+        var sensitiveBranchIds = partitionIds(snapshot, SENSITIVE_READ, "BRANCH");
+        var rows = jdbc.sql("""
+                SELECT b.id, b.booking_code, b.property_id, b.customer_id, b.guest_name, b.guest_phone, b.guest_email,
+                       b.property_snapshot ->> 'propertyName' AS property_name,
+                       NULLIF(b.property_snapshot ->> 'branchId', '')::uuid AS branch_id,
+                       b.status, b.check_in_date, b.check_out_date,
+                       CASE WHEN :sensitiveAll
+                           OR (:sensitiveSelf AND b.customer_id = :profileId)
+                           OR (:sensitiveOwn AND b.property_snapshot ->> 'hostProfileId' = :profileIdText)
+                           OR (:sensitiveAssigned AND (
+                               b.assigned_admin_user_id = :profileId OR EXISTS (
+                                   SELECT 1 FROM booking_attributions sensitive_ba
+                                   WHERE sensitive_ba.booking_id = b.id
+                                     AND sensitive_ba.admin_user_id = :profileId
+                                     AND sensitive_ba.valid_from <= now()
+                                     AND (sensitive_ba.valid_until IS NULL OR sensitive_ba.valid_until > now())
+                               )
+                           ))
+                           OR (:sensitivePartition AND b.property_snapshot ->> 'branchId' IN (:sensitiveBranchIds))
+                           THEN b.total_amount ELSE NULL END AS total_amount,
+                       b.currency, b.created_at, b.version
+                FROM bookings b
+                WHERE b.property_id IN (:propertyIds)
+                  AND b.check_out_date > :fromDate
+                  AND b.check_in_date < :toDateExclusive
+                  AND (
+                    :allScope
+                    OR (:selfScope AND (b.customer_id = :profileId
+                        OR (b.created_by_account_type = 'CUSTOMER' AND b.created_by_account_id = :accountId)))
+                    OR (:ownScope AND b.property_snapshot ->> 'hostProfileId' = :profileIdText)
+                    OR (:assignedScope AND (
+                        b.assigned_admin_user_id = :profileId OR EXISTS (
+                            SELECT 1 FROM booking_attributions ba
+                            WHERE ba.booking_id = b.id AND ba.admin_user_id = :profileId
+                              AND ba.valid_from <= now()
+                              AND (ba.valid_until IS NULL OR ba.valid_until > now())
+                        )
+                    ))
+                    OR (:partitionScope AND b.property_snapshot ->> 'branchId' IN (:branchIds))
+                  )
+                ORDER BY b.check_in_date, b.property_id, b.id
+                LIMIT 2001
+                """)
+            .param("propertyIds", propertyIds)
+            .param("fromDate", fromDate)
+            .param("toDateExclusive", toDateExclusive)
+            .param("accountId", actor.accountId())
+            .param("profileId", snapshot.profileId())
+            .param("profileIdText", snapshot.profileId().toString())
+            .param("allScope", scopes.contains(Scope.ALL))
+            .param("selfScope", scopes.contains(Scope.SELF))
+            .param("ownScope", scopes.contains(Scope.OWN))
+            .param("assignedScope", scopes.contains(Scope.ASSIGNED))
+            .param("partitionScope", scopes.contains(Scope.PARTITION))
+            .param("branchIds", sqlIds(branchIds))
+            .param("sensitiveAll", sensitive.contains(Scope.ALL))
+            .param("sensitiveSelf", sensitive.contains(Scope.SELF))
+            .param("sensitiveOwn", sensitive.contains(Scope.OWN))
+            .param("sensitiveAssigned", sensitive.contains(Scope.ASSIGNED))
+            .param("sensitivePartition", sensitive.contains(Scope.PARTITION))
+            .param("sensitiveBranchIds", sqlIds(sensitiveBranchIds))
+            .query(BookingRow.class).list();
+        var truncated = rows.size() > 2000;
+        var visible = truncated ? rows.subList(0, 2000) : rows;
+        return new BookingTimeline(visible.stream().map(BookingRow::view).toList(),
+            fromDate.toString(), toDateExclusive.toString(), truncated);
     }
 
     @QueryMapping
@@ -181,7 +287,10 @@ public class BookingQuery {
         var effectiveBranchId = branchId == null ? EMPTY_PARTITION : branchId;
 
         var rows = jdbc.sql("""
-                SELECT b.id, b.booking_code, b.property_id, b.status, b.check_in_date, b.check_out_date,
+                SELECT b.id, b.booking_code, b.property_id, b.customer_id, b.guest_name, b.guest_phone, b.guest_email,
+                       b.property_snapshot ->> 'propertyName' AS property_name,
+                       NULLIF(b.property_snapshot ->> 'branchId', '')::uuid AS branch_id,
+                       b.status, b.check_in_date, b.check_out_date,
                        CASE WHEN :sensitiveAll
                            OR (:sensitiveSelf AND :selfMode)
                            OR (:sensitiveOwn AND :ownMode)
@@ -189,7 +298,7 @@ public class BookingQuery {
                            OR (:sensitivePartition AND :partitionMode
                                AND :branchIdText IN (:sensitiveBranchIds))
                            THEN b.total_amount ELSE NULL END AS total_amount,
-                       b.currency, b.created_at
+                       b.currency, b.created_at, b.version
                 FROM bookings b
                 WHERE (NOT :hasStatus OR b.status = :status)
                   AND (NOT :hasCursor OR (b.created_at, b.id) < (:cursorCreatedAt, :cursorId))
@@ -313,17 +422,22 @@ public class BookingQuery {
 
     private enum Mode { SELF, OWN, ASSIGNED, PARTITION, ALL }
     private record Actor(UUID accountId, String accountType) {}
-    private record BookingRow(UUID id, String bookingCode, UUID propertyId, String status,
-        LocalDate checkInDate, LocalDate checkOutDate, BigDecimal totalAmount, String currency,
-        OffsetDateTime createdAt) {
+    private record BookingRow(UUID id, String bookingCode, UUID propertyId, UUID customerId,
+        String guestName, String guestPhone, String guestEmail, String propertyName, UUID branchId,
+        String status, LocalDate checkInDate, LocalDate checkOutDate, BigDecimal totalAmount, String currency,
+        OffsetDateTime createdAt, long version) {
         BookingView view() {
-            return new BookingView(id, bookingCode, propertyId, status, checkInDate.toString(),
-                checkOutDate.toString(), totalAmount == null ? null : totalAmount.toPlainString(), currency.trim());
+            return new BookingView(id, bookingCode, propertyId, customerId, guestName, guestPhone, guestEmail,
+                propertyName, branchId, status, checkInDate.toString(), checkOutDate.toString(),
+                totalAmount == null ? null : totalAmount.toPlainString(), currency.trim(), createdAt.toString(), Long.toString(version));
         }
     }
 
-    public record BookingView(UUID id, String bookingCode, UUID propertyId, String status,
-        String checkInDate, String checkOutDate, String totalAmount, String currency) {}
+    public record BookingView(UUID id, String bookingCode, UUID propertyId, UUID customerId,
+        String guestName, String guestPhone, String guestEmail, String propertyName, UUID branchId, String status,
+        String checkInDate, String checkOutDate, String totalAmount, String currency, String createdAt, String version) {}
     public record BookingConnection(List<BookingView> nodes, PageInfo pageInfo) {}
+    public record BookingTimeline(List<BookingView> nodes, String fromDate, String toDateExclusive, boolean truncated) {}
+    public record BookingTimelineInput(List<UUID> propertyIds, String fromDate, String toDateExclusive) {}
     public record PageInfo(boolean hasNextPage, String endCursor) {}
 }

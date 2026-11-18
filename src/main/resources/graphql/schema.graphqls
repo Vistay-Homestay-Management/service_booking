@@ -2,6 +2,7 @@ type Query {
   bookingServiceInfo: BookingServiceInfo!
   booking(id: ID!): Booking!
   bookings(status: String, limit: Int = 50): [Booking!]! @deprecated(reason: "Use a scope-specific cursor connection")
+  bookingTimeline(input: BookingTimelineInput!): BookingTimeline!
   myBookings(status: String, first: Int = 50, after: String): BookingConnection!
   assignedBookings(status: String, first: Int = 50, after: String): BookingConnection!
   branchBookings(branchId: ID!, status: String, first: Int = 50, after: String): BookingConnection!
@@ -94,6 +95,11 @@ type AnalyticsBreakdown {
 }
 
 type Mutation {
+  createBooking(input: CreateBookingInput!): Booking!
+  confirmBooking(id: ID!, expectedVersion: String!, reason: String!): Booking!
+  checkInBooking(id: ID!, expectedVersion: String!, reason: String!): Booking!
+  checkOutBooking(id: ID!, expectedVersion: String!, reason: String!): Booking!
+  cancelBooking(id: ID!, expectedVersion: String!, reason: String!): Booking!
   createPropertyRateProfileVersion(input: CreatePropertyRateProfileVersionInput!): PropertyRateProfileVersion!
   applyPropertyPriceOverride(input: ApplyPropertyPriceOverrideInput!): AppliedPropertyPriceOverride!
   publishPropertyRateProfileVersion(input: PublishPropertyRateProfileVersionInput!): PricingProfilePublication!
@@ -233,11 +239,54 @@ type Booking {
   id: ID!
   bookingCode: String!
   propertyId: ID!
+  customerId: ID
+  guestName: String!
+  guestPhone: String!
+  guestEmail: String
+  propertyName: String
+  branchId: ID
   status: String!
   checkInDate: String!
   checkOutDate: String!
   totalAmount: String
   currency: String!
+  createdAt: String!
+  version: String!
+}
+
+input BookingTimelineInput {
+  propertyIds: [ID!]!
+  fromDate: String!
+  toDateExclusive: String!
+}
+
+type BookingTimeline {
+  nodes: [Booking!]!
+  fromDate: String!
+  toDateExclusive: String!
+  truncated: Boolean!
+}
+
+input CreateBookingInput {
+  idempotencyKey: String!
+  propertyId: ID!
+  propertyName: String!
+  hostProfileId: ID
+  customerProfileId: ID
+  guestName: String!
+  guestPhone: String!
+  guestEmail: String
+  checkInDate: String!
+  checkOutDate: String!
+  adults: Int = 1
+  children: Int = 0
+  stayType: String = "SHORT_TERM"
+  unitPrice: String!
+  discountAmount: String = "0"
+  feeAmount: String = "0"
+  taxAmount: String = "0"
+  currency: String = "VND"
+  notes: String
 }
 
 type BookingConnection {
