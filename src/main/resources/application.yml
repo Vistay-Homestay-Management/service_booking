@@ -103,6 +103,9 @@ server:
   shutdown: graceful
 
 management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
   endpoints:
     web:
       exposure:
@@ -114,6 +117,8 @@ management:
       show-details: never
 
 vistay:
+  observability:
+    business-metrics-refresh: ${BUSINESS_METRICS_REFRESH:60s}
   security:
     audience: ${KEYCLOAK_BACKOFFICE_AUDIENCE:vistay-backoffice-api}
   topics:

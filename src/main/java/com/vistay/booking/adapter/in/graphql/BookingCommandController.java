@@ -1,6 +1,7 @@
 package com.vistay.booking.adapter.in.graphql;
 
 import com.vistay.booking.application.PropertyPartitionClient;
+import com.vistay.booking.observability.BookingBusinessMetrics;
 import graphql.GraphqlErrorException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -23,10 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class BookingCommandController {
     private final JdbcClient jdbc;
     private final PropertyPartitionClient partitions;
+    private final BookingBusinessMetrics metrics;
 
-    public BookingCommandController(JdbcClient jdbc, PropertyPartitionClient partitions) {
+    public BookingCommandController(JdbcClient jdbc, PropertyPartitionClient partitions, BookingBusinessMetrics metrics) {
         this.jdbc = jdbc;
         this.partitions = partitions;
+        this.metrics = metrics;
     }
 
     @MutationMapping
@@ -99,7 +102,9 @@ public class BookingCommandController {
                   request_hash, resource_type, resource_id, response_code, status, expires_at, completed_at)
                 VALUES (:key, 'CREATE_BOOKING', 'ADMIN', :actor, repeat('0', 64), 'BOOKING', :id, 200, 'SUCCEEDED', now() + interval '7 days', now())
                 """).param("key", input.idempotencyKey()).param("actor", actor).param("id", id).update();
-        return view(id);
+        var result = view(id);
+        metrics.commandSucceeded("create");
+        return result;
     }
 
     @MutationMapping @Transactional @RequiresPermission("booking:update")
@@ -144,7 +149,15 @@ public class BookingCommandController {
         history(id, previous, target, why, actor);
         audit(actor, "booking." + target.toLowerCase(), id);
         outbox(id, version + 1, "booking.status-changed.v1");
-        return view(id);
+        var result = view(id);
+        metrics.commandSucceeded(switch (target) {
+            case "CONFIRMED" -> "confirm";
+            case "CHECKED_IN" -> "check_in";
+            case "COMPLETED" -> "check_out";
+            case "CANCELLED" -> "cancel";
+            default -> target.toLowerCase();
+        });
+        return result;
     }
 
     private BookingQuery.BookingView view(UUID id) {
